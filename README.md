@@ -1,7 +1,7 @@
 # hmode7-apple-mobile
 
 Port of MGC's **H-Mode7** RPG Maker XP plugin to mkxp-z on Apple mobile
-platforms (iOS, iPadOS).
+platforms (iOS, iPadOS, tvOS).
 
 H-Mode7 is a pseudo-3D rotating-perspective renderer — it adds slanted
 top-down maps with zoom, rotation, and heightmap-based terrain elevation
