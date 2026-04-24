@@ -60,11 +60,33 @@ int draw_heightmap(std::int16_t *heightmap,
     const int patternWidth = pattern->w;
     const int patternHeight = pattern->h;
 
-    // heightmap Plane 0 covers `mapHeightPx` rows of `raw_xsize`
-    // int16 entries each. Plane 1 ("bush") is packed after plane 0
-    // as `mapHeightPx` rows of `mapWidthPx` int16 entries (so its
-    // row stride is half of plane 0's).
-    std::int16_t *bush = heightmap + static_cast<long>(mapHeightPx) * mapWidthPx;
+    // Heightmap layout in memory (Table allocated as
+    // `Table.new(mapWidthPx*2, mapHeightPx + mapHeightPx/2)`):
+    //
+    //   Region A (plane 0 / plane 1 interleaved along X):
+    //     rows [0, mapHeightPx), each row is `raw_xsize =
+    //     mapWidthPx * 2` int16 wide. Total size:
+    //     mapHeightPx * raw_xsize = 2 * mapHeightPx * mapWidthPx
+    //     int16 entries. Used by this function (plane 0) and by
+    //     apply_lighting (plane 1 / shadow).
+    //
+    //   Region B ("bush" heights, one plane only):
+    //     starts at flat offset `raw_xsize * mapHeightPx =
+    //     2 * mapHeightPx * mapWidthPx`, spans `mapWidthPx *
+    //     mapHeightPx / 2 * 2 = mapHeightPx * mapWidthPx`
+    //     int16 (the remaining half-height rows of the Table).
+    //
+    // An earlier version computed bush as `heightmap + mapHeightPx
+    // * mapWidthPx`, which overlapped the second half of region A
+    // and corrupted plane-0 heights and plane-1 shadow deltas for
+    // ys in [mapHeightPx/2, mapHeightPx). That showed up as
+    // renderHM7 reading huge oShadow values (100s) that added to
+    // all 3 channels and saturated lit-ground pixels to white.
+    // The correct offset is `raw_xsize * mapHeightPx`, which is
+    // `2 * mapHeightPx * mapWidthPx` because raw_xsize packs the
+    // two interleaved planes.
+    std::int16_t *bush = heightmap
+                         + static_cast<long>(raw_xsize) * mapHeightPx;
 
     for (int yt = 0; yt < mapHeightPx; ++yt) {
         // Ruby builds the pattern by "10 units per pattern pixel"

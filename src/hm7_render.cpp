@@ -476,21 +476,15 @@ int render_hm7(const RenderParams &pp,
                                     red = (sScreenData[6] * sOpacity) >> 8;
                                 }
                             }
-                            // DIAGNOSTIC: off-map-loopX surface-composite CYAN.
-                            (void)blue; (void)green; (void)red;
-                            screenData[0] = 0;
-                            screenData[1] = 255;
-                            screenData[2] = 255;
-                            screenData[3] = 255;
+                            screenData[0] = static_cast<std::uint8_t>(blue);
+                            screenData[1] = static_cast<std::uint8_t>(green);
+                            screenData[2] = static_cast<std::uint8_t>(red);
+                            screenData[3] = sScreenData[7];
                             sScreenData[0] = 0;
                             ylp[0] = (rYt >> 8) & 0xff;
                             ylp[1] = (rYt - (ylp[0] << 8)) & 0xff;
                             continue;
                         }
-                        // DIAGNOSTIC: off-map-loopX transparent -> orange.
-                        screenData[0] = 255;
-                        screenData[1] = 128;
-                        screenData[2] = 0;
                         screenData[3] = 0;
                     }
                     if (rYt < ym) {
@@ -528,21 +522,15 @@ int render_hm7(const RenderParams &pp,
                                     red = (sScreenData[6] * sOpacity) >> 8;
                                 }
                             }
-                            // DIAGNOSTIC: off-map-loopY surface-composite PURPLE.
-                            (void)blue; (void)green; (void)red;
-                            screenData[0] = 128;
-                            screenData[1] = 0;
-                            screenData[2] = 128;
-                            screenData[3] = 255;
+                            screenData[0] = static_cast<std::uint8_t>(blue);
+                            screenData[1] = static_cast<std::uint8_t>(green);
+                            screenData[2] = static_cast<std::uint8_t>(red);
+                            screenData[3] = sScreenData[7];
                             sScreenData[0] = 0;
                             ylp[0] = (rYt >> 8) & 0xff;
                             ylp[1] = (rYt - (ylp[0] << 8)) & 0xff;
                             continue;
                         }
-                        // DIAGNOSTIC: off-map-loopY transparent -> gray.
-                        screenData[0] = 128;
-                        screenData[1] = 128;
-                        screenData[2] = 128;
                         screenData[3] = 0;
                     }
                     if (rYt < ym) {
@@ -813,18 +801,16 @@ int render_hm7(const RenderParams &pp,
 
                 if (sScreenData[0] && !sScreenData[1] && sScreenData[7] == 255 &&
                     sScreenData[2] + sScreenData[3] >= rYt) {
-                    // DIAGNOSTIC: mark this path magenta.
-                    screenData[0] = 255;
-                    screenData[1] = 0;
-                    screenData[2] = 255;
+                    screenData[0] = sScreenData[4];
+                    screenData[1] = sScreenData[5];
+                    screenData[2] = sScreenData[6];
                     screenData[3] = 255;
                     sScreenData[0] = 0;
                     continue;
                 }
 
                 if (yd < dy && yt + 1 == yMax && !noBlack) {
-                    // DIAGNOSTIC: explicit-black path now orange.
-                    screenData[0] = 255; screenData[1] = 128; screenData[2] = 0; screenData[3] = 255;
+                    screenData[0] = 0; screenData[1] = 0; screenData[2] = 0; screenData[3] = 255;
                     sScreenData[0] = 0;
                 } else {
                     if (dy - yd > 0) {
@@ -879,29 +865,20 @@ int render_hm7(const RenderParams &pp,
                             totHA_i = dA[itLayer];
                         }
                         if (!ground && colormapData && colormapData[pos + 3]) {
-                            // DIAGNOSTIC: force wall pixels bright red so
-                            // we can tell whether the white shapes come
-                            // from the wall-rendering path or elsewhere.
-                            blue = 255;  // = R in RGBA
-                            green = 0;
-                            red = 0;
-                            (void)colormapData;
-                            (void)pos;
+                            blue = colormapData[pos];
+                            green = colormapData[pos + 1];
+                            red = colormapData[pos + 2];
                         } else {
-                            // DIAGNOSTIC: force ground-below-walls green.
-                            blue = 0;
-                            green = 255;
-                            red = 0;
-                            (void)mapTilesetData;
+                            blue = mapTilesetData[0];
+                            green = mapTilesetData[1];
+                            red = mapTilesetData[2];
                         }
                         top_flag = 0;
                     } else {
                         top_flag = 1;
-                        // DIAGNOSTIC: force top-flat-ground blue.
-                        blue = 0;
-                        green = 0;
-                        red = 255;
-                        (void)mapTilesetData;
+                        blue = mapTilesetData[0];
+                        green = mapTilesetData[1];
+                        red = mapTilesetData[2];
                     }
 
                     if (lux_d) {
@@ -926,9 +903,29 @@ int render_hm7(const RenderParams &pp,
                         red = clamp_u8(red);
                     }
 
-                    // DIAGNOSTIC: skip surface-composite to test whether
-                    // the white artifacts come from here.
-                    (void)sScreenData;
+                    if (sScreenData[0] && sScreenData[2] + sScreenData[3] >= rYt) {
+                        const int blend = sScreenData[1];
+                        const int sOpacity = sScreenData[7];
+                        if (blend == 0) {
+                            blue = (blue * (255 - sOpacity) + sScreenData[4] * sOpacity) >> 8;
+                            green = (green * (255 - sOpacity) + sScreenData[5] * sOpacity) >> 8;
+                            red = (red * (255 - sOpacity) + sScreenData[6] * sOpacity) >> 8;
+                        } else if (blend == 1) {
+                            blue += (sScreenData[4] * sOpacity) >> 8;
+                            green += (sScreenData[5] * sOpacity) >> 8;
+                            red += (sScreenData[6] * sOpacity) >> 8;
+                            blue = std::min(blue, 255);
+                            green = std::min(green, 255);
+                            red = std::min(red, 255);
+                        } else if (blend == 2) {
+                            blue -= (sScreenData[4] * sOpacity) >> 8;
+                            green -= (sScreenData[5] * sOpacity) >> 8;
+                            red -= (sScreenData[6] * sOpacity) >> 8;
+                            blue = std::max(blue, 0);
+                            green = std::max(green, 0);
+                            red = std::max(red, 0);
+                        }
+                    }
 
                     screenData[0] = static_cast<std::uint8_t>(blue);
                     screenData[1] = static_cast<std::uint8_t>(green);
@@ -959,19 +956,29 @@ int render_hm7(const RenderParams &pp,
             std::uint8_t *screenData = byte_row(pp.screen_bitmap, yt) + (xt << 2);
             std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, yt) + (xt << 3);
             if (sScreenData[0]) {
-                // DIAGNOSTIC: mark final-overdraw surface pixel yellow.
-                screenData[0] = 255;
-                screenData[1] = 255;
-                screenData[2] = 0;
-                screenData[3] = 255;
+                int blue, green, red;
+                if (!sScreenData[1] && sScreenData[7] == 255) {
+                    blue = sScreenData[4];
+                    green = sScreenData[5];
+                    red = sScreenData[6];
+                } else {
+                    const int blend = sScreenData[1];
+                    if (blend == 2) {
+                        blue = 0; green = 0; red = 0;
+                    } else {
+                        const int sOpacity = sScreenData[7];
+                        blue = (sScreenData[4] * sOpacity) >> 8;
+                        green = (sScreenData[5] * sOpacity) >> 8;
+                        red = (sScreenData[6] * sOpacity) >> 8;
+                    }
+                }
+                screenData[0] = static_cast<std::uint8_t>(blue);
+                screenData[1] = static_cast<std::uint8_t>(green);
+                screenData[2] = static_cast<std::uint8_t>(red);
+                screenData[3] = sScreenData[7];
                 sScreenData[0] = 0;
                 continue;
             }
-            // DIAGNOSTIC: final-overdraw transparent-path -> teal RGB
-            // so we can tell it apart from any leftover content.
-            screenData[0] = 0;
-            screenData[1] = 128;
-            screenData[2] = 128;
             screenData[3] = 0;
         }
     }
