@@ -72,6 +72,37 @@ struct RenderSurface {
     int disp_offset;      // [10]
 };
 
+// Wall-layer selection algorithm. Between v1.2.x and v1.4 the DLL
+// was reworked (see the forum changelog: V1.3 "the DLL part is
+// entirely rewritten"; V1.4 "can now handle n layers"). The two
+// eras disagree on which layer's colormap a wall pixel samples.
+//
+//   `WallLayerMode::TopCumulative`  - matches pre-v1.3 DLLs
+//       (Pokemon Insurgence ships one at MGC_Hmode7.dll, 8 exports,
+//       stamped 2011-05-15). Iterating top-to-bottom, the first
+//       layer whose *own* height exceeds the wall-pixel's depth
+//       from the tile's crown wins. A 3-layer house (ground /
+//       wall / roof) thus surfaces each layer's colormap in its
+//       correct vertical band, giving visible facades even when
+//       the ground heightmap contributes no extra relief.
+//
+//   `WallLayerMode::BottomCumulative` - matches v1.4.4 reference
+//       source. Condition is `dy - yd <= dA[layer]` where dA is
+//       *bottom-cumulative*, which in the common case where `dy ==
+//       dA[top]` (no ground-heightmap contribution) always picks
+//       the top layer. Faithful to v1.4.4's code but the
+//       layer-selection loop is effectively degenerate.
+//
+// Default is TopCumulative because Insurgence (and every other
+// pre-v1.3 title) depends on it to render buildings correctly. To
+// run a game shipping a v1.3+ DLL faithfully, the caller can flip
+// the mode via the Ruby-side HM7::Native::WALL_LAYER_MODE constant
+// which the binding layer forwards as `params.wall_layer_mode`.
+enum class WallLayerMode : int {
+    TopCumulative    = 0,  // v1.2.x / pre-V1.3 DLL
+    BottomCumulative = 1,  // v1.4.4 reference
+};
+
 // Main entry point. Returns `oCamera` — the maximum ody seen at
 // `yt == ysize-1`, used on the Ruby side to auto-adjust the camera
 // Y offset in modes 1/2.
@@ -81,7 +112,8 @@ int render_hm7(const RenderParams &p,
                const RenderVars &v,
                const RenderSurface *surfaces,
                int surface_count,
-               int nb_layers);
+               int nb_layers,
+               WallLayerMode wall_layer_mode = WallLayerMode::TopCumulative);
 
 }  // namespace hm7
 

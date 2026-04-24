@@ -54,7 +54,10 @@ int render_hm7(const RenderParams &pp,
                const RenderVars &vv,
                const RenderSurface *surfaces,
                int surface_count,
-               int nb_layers) {
+               int nb_layers,
+               WallLayerMode wall_layer_mode) {
+    const bool use_top_cumulative =
+        (wall_layer_mode == WallLayerMode::TopCumulative);
 
     // Bail if critical surfaces are missing.
     if (!pp.screen_bitmap || !pp.lightline || !pp.data_table ||
@@ -843,32 +846,16 @@ int render_hm7(const RenderParams &pp,
                     sScreenData[0] = 0;
                 } else {
                     if (dy - yd > 0) {
-                        // Layer selection for the wall pixel. The
-                        // v1.4.4 reference uses cumulative-from-
-                        // bottom `dA`, which for the common case
-                        // `dy == dA[nb_layers-1]` (no ground
-                        // heightmap contribution) always picks the
-                        // topmost layer because `dy-yd <= dA[top]`
-                        // is trivially true. That means roof-only
-                        // tiles render walls using the roof's
-                        // (usually transparent) colormap, falling
-                        // through to flat tile color.
-                        //
-                        // The v1.2.1 DLL Insurgence ships instead
-                        // accumulates from the TOP: the wall pixel
-                        // at depth `dy-yd` from the wall's crown
-                        // picks the first layer whose
-                        // top-accumulated height still exceeds the
-                        // depth. So top-layer for the top slice,
-                        // next layer for the middle slice, etc.
-                        // This surfaces each layer's colormap at
-                        // its corresponding vertical band of the
-                        // extruded wall - which is what Windows
-                        // does.
+                        // Wall-pixel layer selection. See
+                        // hm7_render.h's `WallLayerMode` comment
+                        // for why we support two algorithms.
                         int totHA_i = 0;
                         ground = 1;
                         for (int itLayer = nb_layers - 1; itLayer >= 0; --itLayer) {
-                            if (dy - yd <= totHA_i + hA[itLayer]) {
+                            const int threshold = use_top_cumulative
+                                ? (totHA_i + hA[itLayer])
+                                : dA[itLayer];
+                            if (dy - yd <= threshold) {
                                 if (!initA[itLayer]) {
                                     int ti = ptrTileIndex[itLayer + 1] << 5;
                                     // Colormap row lookup. Original (bottom-up DIB):
@@ -913,11 +900,19 @@ int render_hm7(const RenderParams &pp,
                                 ground = 0;
                                 break;
                             }
-                            // Advance the top-down accumulator by
-                            // the current layer's own height, so
-                            // the next (lower) layer is considered
-                            // in its correct vertical band.
-                            totHA_i += hA[itLayer];
+                            // Advance accumulator to the next
+                            // layer. Under top-cumulative mode we
+                            // add only the current layer's own
+                            // height. Under bottom-cumulative we
+                            // replace with `dA[itLayer]` (the
+                            // reference's behaviour - also left
+                            // here for completeness even though
+                            // this branch almost never fires).
+                            if (use_top_cumulative) {
+                                totHA_i += hA[itLayer];
+                            } else {
+                                totHA_i = dA[itLayer];
+                            }
                         }
                         if (!ground && colormapData && colormapData[pos + 3]) {
                             blue = colormapData[pos];

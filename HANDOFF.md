@@ -29,7 +29,10 @@ build verification exists to make that class of bug fail loudly.
 binding layer written, xcodegen integration done, build succeeds,
 app launches, the full Insurgence intro cinematic renders correctly
 with sprites in the right positions, correct Z-ordering, no
-corruption or missing elements. Matches the Windows reference.
+corruption or missing elements, and buildings show per-tile
+wall-texture detail (roof at top, walls in middle, doors at
+bottom) matching the Windows reference. Verified pixel-by-pixel
+on the Insurgence intro + post-intro town.
 
 | Function             | Source LOC | Port LOC | File                          |
 |----------------------|-----------:|---------:|-------------------------------|
@@ -137,6 +140,10 @@ Previously high-priority items that are now done:
       (see `docs/SPRITE_REMAINING_BUGS.md` for the post-mortem — the
       root cause was a Ruby `method_defined?(:initialize)` visibility
       gotcha that silently skipped the shim's reallocation patch)
+- [x] Buildings show proper wall textures matching the Windows reference
+      (see `docs/V121_WALL_LAYER_FIX.md` — Insurgence ships the
+      pre-v1.3 DLL whose wall-loop layer selection accumulates
+      heights FROM THE TOP, not bottom-up cumulatively like v1.4.4)
 
 ## How to resume / verify
 
