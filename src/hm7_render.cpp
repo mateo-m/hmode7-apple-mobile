@@ -323,16 +323,31 @@ int render_hm7(const RenderParams &pp,
                             if (rYt - h > sHMax) break;
                             if (rYt - h > yMaxDraw - 1) break;
 
-                            // sData = firstSRow - (sHeight - 1 - ((h - sH0) * sFh >> 10)) * sRowSize + sX
-                            // top-down: row = sHeight - 1 - ((h - sH0) * sFh >> 10)? No — original
-                            // subtracts rows from firstRow (bottom), which in top-down means row
-                            // = (sHeight - 1) - (...). Actually: firstRow in bottom-up DIB is the
-                            // BOTTOM row. So firstRow - N*pitch goes UP. In top-down SDL,
-                            // pixels[0] is TOP row. So the equivalent to (firstRow - N*pitch) is
-                            // pixels[sHeight - 1 - N].
-                            const int row_idx = (sHeight - 1) - ((sHeight - 1 - ((h - sH0) * sFh >> 10)));
-                            // Simplify: row_idx = (h - sH0) * sFh >> 10
-                            const int src_row = (h - sH0) * sFh >> 10;
+                            // Original source row math (bottom-up DIB):
+                            //   sData = firstSRow
+                            //         - (sHeight - 1 - ((h - sH0) * sFh >> 10)) * sRowSize
+                            //         + sX
+                            // where firstSRow pointed at DISPLAY row 0 (top of
+                            // image, at memory offset (sHeight-1)*pitch since
+                            // bottom-up). Subtracting N pitches from firstSRow
+                            // reaches display row N.
+                            //
+                            // So the original accessed display row
+                            //   N = sHeight - 1 - ((h - sH0) * sFh >> 10)
+                            // directly.
+                            //
+                            // In top-down SDL, display row == memory row, so we
+                            // just use that same N as the top-down row index.
+                            //
+                            // High `h` corresponds to the top of the on-screen
+                            // sprite draw, which should sample row 0 of the
+                            // bitmap (the TOP of the source image). At h==sHinit:
+                            //   X = sRealHeight * sFh >> 10 ~= sHeight-1
+                            //   N = sHeight-1 - (sHeight-1) = 0  (top) ✓
+                            // Low `h` corresponds to the anchor (bottom of sprite
+                            // on-screen) and should sample row sHeight-1. At h=0:
+                            //   X = 0, N = sHeight-1 (bottom) ✓
+                            const int src_row = (sHeight - 1) - ((h - sH0) * sFh >> 10);
                             if (src_row < 0 || src_row >= sHeight) continue;
                             const std::uint8_t *sData =
                                 byte_row_const(sBitmap, src_row) + sX;
@@ -683,7 +698,12 @@ int render_hm7(const RenderParams &pp,
                                 --h;
                                 if (rYt - h > sHMax) break;
                                 if (rYt - h > yMaxDraw - 1) break;
-                                const int src_row = (h - sH0) * sFh >> 10;
+                                // Source row: see long explanation in the
+                                // pre-surfaces pass above. Display row index
+                                // is `sHeight - 1 - ((h - sH0) * sFh >> 10)`
+                                // and in top-down SDL that equals the memory
+                                // row we want.
+                                const int src_row = (sHeight - 1) - ((h - sH0) * sFh >> 10);
                                 if (src_row < 0 || src_row >= sHeight) continue;
                                 const std::uint8_t *sData = byte_row_const(sBitmap, src_row) + sX;
                                 if (!sData[3]) continue;
@@ -800,11 +820,19 @@ int render_hm7(const RenderParams &pp,
                             if (dy - yd <= dA[itLayer]) {
                                 if (!initA[itLayer]) {
                                     int ti = ptrTileIndex[itLayer + 1] << 5;
-                                    // colormap lookup. Original:
-                                    //   colormapData = colormapBegin - ((ti + ysr) * 10 << 6)
-                                    //   oColor = colormapData[xsr << 2]
-                                    // top-down: row = (ti + ysr) * 10 (since atlas row is 10*32 px per strip cell)
-                                    const int cm_row = (ti + ysr) * 10;
+                                    // Colormap row lookup. Original (bottom-up DIB):
+                                    //   colormapData = colormapBegin
+                                    //                   - ((ti + ysr) * 10 << 6)
+                                    //                   + (xsr << 2);
+                                    // The `* 10 << 6 = * 640 bytes` shift is exactly
+                                    // one colormap-atlas row (160 px wide). So in
+                                    // top-down, `(ti + ysr)` IS the row index; no
+                                    // `* 10` multiplier. drawTextureset writes at
+                                    // the same row convention: tile `N` occupies
+                                    // rows [N*32, N*32+31], and renderHM7 here
+                                    // expects to read row `ti + ysr` where
+                                    // ti = layer_tile_num * 32.
+                                    const int cm_row = ti + ysr;
                                     if (cm_row < 0 || cm_row >= pp.colormap->h) {
                                         colormapData = nullptr;
                                     } else {
@@ -812,7 +840,7 @@ int render_hm7(const RenderParams &pp,
                                         const int oColor = cmRow[xsr << 2];
                                         // Second lookup depends on oColor (direction code).
                                         if (oColor == 32 || oColor == 96) {
-                                            const int cm_row2 = (ti + xsr) * 10;
+                                            const int cm_row2 = ti + xsr;
                                             if (cm_row2 < 0 || cm_row2 >= pp.colormap->h) {
                                                 colormapData = nullptr;
                                             } else {
