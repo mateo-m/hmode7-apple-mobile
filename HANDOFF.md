@@ -2,12 +2,12 @@
 
 Snapshot of what's done, what's next, and the known caveats so this
 can be resumed cleanly in a future session (possibly by a different
-coder / agent). Updated after the initial porting burst.
+coder / agent). Updated after full port + mkxp-z integration.
 
 ## Status
 
-**Completed** — all 8 non-`renderHM7` functions have a pure-C++
-port under `src/`:
+**Completed** — all 9 functions ported, Ruby binding layer written,
+xcodegen integration done, build succeeds, app launches on sim.
 
 | Function             | Source LOC | Port LOC | File                          |
 |----------------------|-----------:|---------:|-------------------------------|
@@ -19,149 +19,181 @@ port under `src/`:
 | `drawTextureset`     | 102        | 279      | `hm7_draw_textureset.cpp`     |
 | `drawMapTileset`     | 105        | 229      | `hm7_draw_map_tileset.cpp`    |
 | `refreshMapTileset`  | 90         | (same)   | `hm7_draw_map_tileset.cpp`    |
+| `renderHM7`          | 1010       | 954      | `hm7_render.cpp`              |
 
-Plus the Ruby↔C++ binding layer (`hm7_bindings.cpp`, 185 LOC) and the
-pixel-access primitives (`hm7_pixels.h`, 60 LOC).
+Plus the portable Ruby↔C++ binding helpers (`hm7_bindings.cpp`,
+191 LOC) and the pixel-access primitives (`hm7_pixels.h`, 60 LOC).
 
-**Total port so far: ~1840 LOC of C++ across 17 files.** The bindings
+**Total port: ~2850 LOC of C++ across 19 files.** The bindings
 layer compiles two ways: with `HM7_HAVE_MKXP_BITMAP` set, it resolves
 `VALUE` arguments against mkxp-z's Bitmap/Table classes; without,
 every binding is a null-returning stub so the pure pixel-math
 functions can be unit-tested in isolation.
 
-**Remaining** — one function + integration:
+**Integration on the mkxp-z-apple-mobile side** (see
+`mkxp-z-apple-mobile` repo, `dev` branch):
 
-| Task                                                 | Effort    |
-|------------------------------------------------------|----------:|
-| `renderHM7` port (split into 5 per design doc §4)    | ~1000 LOC |
-| Ruby-side shim overriding `Win32API.new("MGC_Hmode7", …)` | ~80 LOC |
-| xcodegen integration (submodule + compile into mkxp-z-apple-mobile) | ~30 LOC |
-| First end-to-end integration test on Insurgence intro |         — |
-| Pixel-exact comparison against Windows reference run  |         — |
+- `binding/hmode7-binding.cpp` — registers `HM7::Native` module
+  functions via `rb_define_module_function`. Unwraps Ruby Bitmap/
+  Table/Array/Hash objects into C++ types and dispatches into the
+  `hm7::` namespace.
+- `scripts/postload/hmode7_shim.rb` — overrides the 8 `HM7.self.xxx`
+  methods in Insurgence's `210-HM7_NEW_CLASSES.rb` to bypass the
+  Win32API stubs and call `HM7::Native` directly.
+- `binding/binding-mri.cpp` updated to call `hmode7BindingInit()` +
+  load `Postload/hmode7_shim.rb`.
+- `ios/Empo/project.yml` updated with `HM7_HAVE_MKXP_BITMAP` define,
+  extra header search path for `hmode7/src`, and source entries for
+  all 10 `.cpp` files.
+- `hmode7` added as a git submodule (branch=main) at top level of
+  mkxp-z-apple-mobile.
 
-## How to resume
+**Verified**: `xcodebuild -sdk iphonesimulator -target Empo`
+succeeds cleanly. The app installs + launches on iPhone 17 Pro
+sim (iOS 26.4) without crash. No end-to-end game test done yet
+(requires Insurgence game data on the sim).
 
-### 1. Finish `renderHM7`
+## Remaining work
 
-This is the big monolithic rasterizer. The design doc (§1.7 and §4)
-recommends splitting it into 5 helper functions:
+| Task                                                 | Priority  |
+|------------------------------------------------------|-----------|
+| Test on Insurgence: new game → Yes/Yes → verify flying-Pokemon intro renders | high |
+| Pixel-diff against a Windows reference recording     | high |
+| Fix `sScreenBitmap` width: needs to be `2 × screen.width` on the Ruby side | medium |
+| Add `Bitmap::uploadCPURect(x,y,w,h)` to mkxp-z-apple-mobile | low (perf) |
+| Split `renderHM7` into 5 helper functions per design doc §4 | low (readability) |
 
-1. `render_pre_surfaces` — pre-flushes surfaces whose `screenY1` is
-   below the first drawn row. Runs exactly once (on `yt == yMax-1`).
-2. `render_surface_column` — rasterizes each intersecting surface
-   into the shared `sScreenBitmap` scratch for the current column.
-3. `render_wall_column` — draws the per-column vertical wall strip,
-   sampling from `colormap` (sides) and `mapTileset` (top), applying
-   lighting + shadow + optional blend against the scratch buffer.
-4. `render_final_overdraw` — fills the pixels above the topmost-
-   drawn-Y with either surface pixel or transparency.
-5. A top-level `render_hm7` that orchestrates the yt/xt loops and
-   calls the above three inner helpers.
+## How to resume / verify
 
-Read lines 763-1767 of the original `reference/MGC_Hmode7_1_4_4.cpp`.
-Keep the integer fixed-point math exact; the only structural
-changes are row direction + pixel byte order + splitting into
-helpers.
+### 1. Launch Insurgence on the sim
 
-**Known gotcha**: `sScreenBitmap` must be allocated as 2× width on
-the Ruby side (design doc §10.5). Otherwise renderHM7 overreads.
+Install Insurgence game data into the Empo sandbox Documents dir.
+Boot the sim, launch Empo, select Insurgence from the game list.
+Start a new game, select Yes/Yes through the story prompt.
 
-**Known gotcha**: lightline bitmap has 3 rows. Row 2 = per-row
-lighting; row 1 = per-column relief + horizontal zoom scratch;
-row 0 = reserved for `ym` tracking. See design doc §10.6.
+**Expected**: the 2-Pokemon-flying-over-world-map flyover renders
+with rotation + fog. The world map beneath the Pokemon should be
+visible (previously only the fog rendered).
 
-### 2. Write the Ruby shim
+**Failure modes**:
+- All black with only fog → port is wired but `HM7::Native.xxx`
+  is throwing Ruby-side errors. Check the SDL stderr pipe for
+  exceptions; most likely cause is a shape mismatch between
+  Insurgence's `@params` array and what the binding expects.
+- Garbled pixels → byte-order or row-direction bug somewhere in
+  the port. See "Known caveats" below.
+- Correct rendering but low FPS → expected; the
+  `Bitmap::uploadCPURect` optimization hasn't landed. Each frame
+  does a full-bitmap GPU upload.
 
-Override the nine `Win32API.new("MGC_Hmode7", "funcName", ...)`
-bindings in Insurgence's `210-HM7_NEW_CLASSES.rb:41-49`. Replace
-the calls (e.g. `HM7::Draw_Map_Tileset.call(...)`) with
-`HM7::Native.draw_map_tileset(...)` where `HM7::Native` is a new
-Ruby module our C++ registers via `rb_define_module_function`.
+### 2. Diff against Windows reference
 
-Template location: `mkxp-z-apple-mobile/scripts/postload/hmode7_shim.rb`
-(new file). Should live alongside `pokemon_windowskin_fix.rb`.
+The port is deterministic integer arithmetic. Record a Windows
+session of the intro at the same offset, compare frames.
 
-Needs to be a postload (not preload) because `HM7` doesn't exist
-until Insurgence's own scripts load.
+### 3. Fix `sScreenBitmap` width
 
-### 3. Build integration
+Add to `hmode7_shim.rb` something like:
 
-Add the `hmode7-apple-mobile` repo as a submodule of
-`mkxp-z-apple-mobile`. Extend `ios/Empo/project.yml` to compile
-`src/hm7_*.cpp` into the main target. Define
-`HM7_HAVE_MKXP_BITMAP` when compiling so the bindings layer
-resolves to real mkxp-z code instead of stubs.
+```ruby
+# Patch HM7 setup to allocate sScreenBitmap at 2× width (the
+# native renderer needs 8 bytes/pixel of scratch space, not 4).
+HM7::Map.class_eval do
+  alias_method :_mkxp_orig_init, :initialize
+  def initialize(*args)
+    _mkxp_orig_init(*args)
+    # @params[10] is sScreenBitmap; reallocate at 2× width.
+    if @params && @params[10].is_a?(Bitmap)
+      old = @params[10]
+      @params[10] = Bitmap.new(old.width * 2, old.height)
+      old.dispose
+    end
+  end
+end
+```
 
-Needs a `Bitmap::uploadCPURect(x, y, w, h)` method added to
-mkxp-z-apple-mobile's Bitmap class to avoid the full-bitmap
-sync roundtrip in `bitmap_commit_rect` (see TODO comment in
-`hm7_bindings.cpp`).
-
-### 4. Test on device
-
-Launch Pokemon Insurgence on the sim or an iPhone. Start a new
-game, select Yes / Yes through the story prompt. Expected
-result: the 2-Pokemon-flying-over-world-map intro renders with
-the rotation and fog. If instead you see mostly black with only
-fog, the port isn't wired correctly. If you see a garbled
-mess, the pixel byte order or row direction translation has a
-bug somewhere.
-
-Compare against a Windows screen recording frame-by-frame; any
-pixel divergence is a bug in our port. The math is deterministic
-integer arithmetic, so bit-exact output is achievable in
-principle.
+Untested — the exact class name (`HM7::Map` vs `HM7::Map_H_Mode7`)
+needs verification against Insurgence's 210-HM7_NEW_CLASSES.rb:449
+class definition.
 
 ## Known caveats / TODOs
 
-1. **`drawTextureset` pointer-arithmetic translation is the highest-
-   risk port.** The original uses `(k << 7)` column offsets that
-   interact with animated-tile atlas layout. The port mirrors the
-   translation but I was unsure about the column shift semantics in
-   a few places; expect to verify against reference output first
-   thing.
+1. **`@params[10]` needs 2× width** — the original Windows DLL
+   overreads; our port would crash or paint garbage without the
+   shim above.
 
-2. **`drawHeightmap` reads `pattern.r` (not `pattern.b`).** The
-   original reads byte `[0]` which is "blue" in BGRA. For grayscale
-   heightpatterns R==G==B so either works, but if you ever feed a
-   non-grayscale pattern (unusual), verify the channel is what you
-   expect.
+2. **`drawTextureset` pointer arithmetic is the highest-risk
+   port.** The original uses `(k << 7)` column offsets for animated
+   tile atlas layout. First visual test will reveal any column-
+   shift bug.
 
-3. **`sScreenBitmap` width doubling** is enforced in the port (when
-   we finish renderHM7) but the Ruby side needs a corresponding
-   patch. Add a postload shim that overrides the sScreenBitmap
-   allocation.
+3. **`drawMapTileset` metadata byte layout** must stay in sync with
+   `renderHM7`'s reads. Both are untested as a pair; the first run
+   is the integration test.
 
-4. **`drawMapTileset` metadata byte layout** must stay in sync with
-   whatever renderHM7 reads. Right now both are untested; the first
-   test run will either Just Work™ or reveal a byte-ordering bug
-   between them.
+4. **`compute_m7` default clip params** — Insurgence's `@parameters`
+   is only 12 elements; the binding defaults `xMin/xMax/yMin/yMax`
+   to full-lightline / data bounds. Check this matches Windows
+   behaviour (the Windows DLL read uninitialized stack memory for
+   those, which happened to be ~zero-ish).
 
-5. **Performance**: this is a CPU software rasterizer doing ~300k
-   pixel operations per frame at 640x480. Expect 30-60 FPS on a
-   modern iPhone. If it's slower, the candidate hotspots are the
-   per-pixel surface-compositing loop and the bilinear sampling in
-   `applyZoom`/`drawHeightmap`. NEON vectorization can help but
-   isn't necessary for the proof-of-concept.
+5. **`render_hm7` default clip params** — Similarly, Insurgence's
+   `@params` is 13 elements; the binding defaults `x_min=0,
+   x_max=screen.w, y_min=0, y_max_draw=screen.h`. Reasonable but
+   unverified against Windows.
 
-## Files
+6. **Performance**: full-bitmap `replaceRaw` every frame re-uploads
+   `screen.w * screen.h * 4` bytes. For 640x480 that's 1.2 MB/frame
+   = 72 MB/s at 60 FPS. Measurable but not catastrophic on modern
+   hardware. `Bitmap::uploadCPURect` would cut this to the modified
+   region only; deferred to post-correctness.
+
+## Files (port repo — //hmode7-apple-mobile)
 
 - `reference/MGC_Hmode7_1_4_4.cpp` — MGC's original, unmodified.
 - `docs/HMODE7_PORT_DESIGN.md` — full design doc with algorithm
   analysis, data shapes, and risk matrix.
-- `src/hm7_*.cpp` + `*.h` — the port so far.
+- `src/hm7_*.cpp` + `*.h` — the port.
 - `README.md` — public-facing overview + credits to MGC.
+- `HANDOFF.md` — this file.
 
-## Commit log (high-level)
+## Files (integration — mkxp-z-apple-mobile, branch `dev`)
+
+- `binding/hmode7-binding.cpp` — Ruby module registration.
+- `binding/binding-mri.cpp` — calls `hmode7BindingInit()` + loads
+  the postload shim.
+- `scripts/postload/hmode7_shim.rb` — redefines `HM7.self.xxx` to
+  use the native module.
+- `hmode7/` — submodule of //hmode7-apple-mobile, branch=main.
+
+## Commit log
+
+### Port repo (//hmode7-apple-mobile)
 
 ```
-chore: import original MGC h-mode7 source and design doc
-feat: port applyopacity as port binding proof-of-concept
-docs: readme - add tvos back to platform list
-feat: port applyzoom + ruby bindings layer
-feat: port applylighting - heightmap row shadow/highlight pass
-feat: port computem7 - mode7 projection lut + per-row lighting
-feat: port drawheightmap - bilinear pattern sampling + per-tile height accumulation
-feat: port drawtextureset - per-tile wall strip atlas build
+fix: include table.h; replaceraw takes non-const void*
+fix: use &table->at(0,0,0) for raw int16 access; correct rb_hash_foreach callback signature
+feat: port renderhm7 - main rasterizer with pre/inline/final surface passes
+docs: add handoff.md with session status and remaining work
 feat: port drawmaptileset + refreshmaptileset - per-tile atlas build
+feat: port drawtextureset - per-tile wall strip atlas build
+feat: port drawheightmap - bilinear pattern sampling + per-tile height accumulation
+feat: port computem7 - mode7 projection lut + per-row lighting
+feat: port applylighting - heightmap row shadow/highlight pass
+feat: port applyzoom + ruby bindings layer
+docs: readme - add tvos back to platform list
+feat: port applyopacity as port binding proof-of-concept
+chore: import original MGC h-mode7 source and design doc
+```
+
+### Integration (mkxp-z-apple-mobile)
+
+```
+feat: integrate mgc h-mode7 native port for insurgence intro scene
+```
+
+### Outer project (empo-app)
+
+```
+build: wire hmode7 port into xcode project and bump mkxp-z submodule
 ```
