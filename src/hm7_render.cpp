@@ -898,26 +898,27 @@ int render_hm7(const RenderParams &pp,
                             green = colormapData[pos + 1];
                             red = colormapData[pos + 2];
                         } else {
-                            // Fallback: sample tile at a position
-                            // that interpolates from the anchor's
-                            // ysr (at wall base) toward row 0 (at
-                            // wall top). This reveals whatever art
-                            // is in the tile's upper rows as the
-                            // wall rises, so a 2D tile with roof at
-                            // top and walls at bottom shows roof
-                            // correctly at the wall's top and anchor
-                            // color at the base - approximates the
-                            // multi-cell facade look that v1.2.1
-                            // Windows produces on Insurgence.
+                            // Fallback: map wall row to tile row
+                            // LINEARLY, so the wall shows the 2D
+                            // tile's full vertical art. Wall base
+                            // (yd == 0 = on-screen bottom of the
+                            // visible lifted tile) samples the tile's
+                            // bottom row (ysr=31 = walls/door).
+                            // Wall top (yd == dy = on-screen top of
+                            // the lifted tile) samples the tile's
+                            // top row (ysr=0 = roof).
                             //
-                            // Only use this sample if it has alpha>0;
-                            // otherwise fall back to the anchor pixel
-                            // (some tiles have transparent top rows
-                            // and the interpolated row hits those).
+                            // Only apply this sample when it has
+                            // opaque alpha. If the interpolated row
+                            // hits a transparent part of the tile
+                            // art (for example near a tile's border),
+                            // keep the anchor pixel so the silhouette
+                            // stays solid.
                             int sample_ysr = ysr;
                             if (dy > 0) {
-                                sample_ysr = ysr - (ysr * (dy - yd)) / dy;
+                                sample_ysr = 31 - (31 * yd) / dy;
                                 if (sample_ysr < 0) sample_ysr = 0;
+                                if (sample_ysr > 31) sample_ysr = 31;
                             }
                             const int sample_yts = (tileRow << 5) + sample_ysr;
                             const std::uint8_t *wall_sample = nullptr;
