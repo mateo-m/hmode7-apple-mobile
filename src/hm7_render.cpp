@@ -898,27 +898,26 @@ int render_hm7(const RenderParams &pp,
                             green = colormapData[pos + 1];
                             red = colormapData[pos + 2];
                         } else {
-                            // Fallback: map wall row to tile row
-                            // LINEARLY, so the wall shows the 2D
-                            // tile's full vertical art. Wall base
-                            // (yd == 0 = on-screen bottom of the
-                            // visible lifted tile) samples the tile's
-                            // bottom row (ysr=31 = walls/door).
-                            // Wall top (yd == dy = on-screen top of
-                            // the lifted tile) samples the tile's
-                            // top row (ysr=0 = roof).
+                            // Fallback: sample the 2D tile art along
+                            // an interpolation from row 0 (at wall
+                            // base) toward the anchor's ysr (at wall
+                            // top). This reveals vertical detail
+                            // hidden in the tile art (stair steps,
+                            // building facades, etc.) that would
+                            // otherwise extrude as a single uniform
+                            // column. Wall opacity still follows the
+                            // sampled pixel's alpha so silhouettes
+                            // respect the tile's transparent borders.
                             //
-                            // Only apply this sample when it has
-                            // opaque alpha. If the interpolated row
-                            // hits a transparent part of the tile
-                            // art (for example near a tile's border),
-                            // keep the anchor pixel so the silhouette
-                            // stays solid.
+                            // When the sampled pixel happens to land
+                            // on a transparent part of the tile art,
+                            // fall back to the anchor pixel so we
+                            // don't bite out chunks of the building
+                            // silhouette.
                             int sample_ysr = ysr;
                             if (dy > 0) {
-                                sample_ysr = 31 - (31 * yd) / dy;
+                                sample_ysr = ysr - (ysr * (dy - yd)) / dy;
                                 if (sample_ysr < 0) sample_ysr = 0;
-                                if (sample_ysr > 31) sample_ysr = 31;
                             }
                             const int sample_yts = (tileRow << 5) + sample_ysr;
                             const std::uint8_t *wall_sample = nullptr;
