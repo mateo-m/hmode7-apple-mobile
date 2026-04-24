@@ -801,9 +801,10 @@ int render_hm7(const RenderParams &pp,
 
                 if (sScreenData[0] && !sScreenData[1] && sScreenData[7] == 255 &&
                     sScreenData[2] + sScreenData[3] >= rYt) {
-                    screenData[0] = sScreenData[4];
-                    screenData[1] = sScreenData[5];
-                    screenData[2] = sScreenData[6];
+                    // DIAGNOSTIC: mark this path magenta.
+                    screenData[0] = 255;
+                    screenData[1] = 0;
+                    screenData[2] = 255;
                     screenData[3] = 255;
                     sScreenData[0] = 0;
                     continue;
@@ -945,26 +946,11 @@ int render_hm7(const RenderParams &pp,
             std::uint8_t *screenData = byte_row(pp.screen_bitmap, yt) + (xt << 2);
             std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, yt) + (xt << 3);
             if (sScreenData[0]) {
-                int blue, green, red;
-                if (!sScreenData[1] && sScreenData[7] == 255) {
-                    blue = sScreenData[4];
-                    green = sScreenData[5];
-                    red = sScreenData[6];
-                } else {
-                    const int blend = sScreenData[1];
-                    if (blend == 2) {
-                        blue = 0; green = 0; red = 0;
-                    } else {
-                        const int sOpacity = sScreenData[7];
-                        blue = (sScreenData[4] * sOpacity) >> 8;
-                        green = (sScreenData[5] * sOpacity) >> 8;
-                        red = (sScreenData[6] * sOpacity) >> 8;
-                    }
-                }
-                screenData[0] = static_cast<std::uint8_t>(blue);
-                screenData[1] = static_cast<std::uint8_t>(green);
-                screenData[2] = static_cast<std::uint8_t>(red);
-                screenData[3] = sScreenData[7];
+                // DIAGNOSTIC: mark final-overdraw surface pixel yellow.
+                screenData[0] = 255;
+                screenData[1] = 255;
+                screenData[2] = 0;
+                screenData[3] = 255;
                 sScreenData[0] = 0;
                 continue;
             }
