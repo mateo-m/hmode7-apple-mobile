@@ -1,8 +1,10 @@
 # H-Mode7 Remaining Sprite Bugs — Investigation & Fix Plan
 
-Written after a full night of investigation. Everything that's known up
-to the moment we stopped is captured here so the next session can pick
-up without re-digging.
+**STATUS: RESOLVED.** Root cause and fix documented below; keeping this
+file as a post-mortem / reference for future HM7 work.
+
+Written originally as a live investigation plan, then updated once the
+underlying bug was found.
 
 ## Status of the port
 
@@ -505,16 +507,100 @@ fidelity and accept the 1-column loss.
 
 Status: cosmetic, can be fixed last.
 
-## Summary
+## Actual root cause (resolved)
 
-The single most likely explanation for the "sprite at wrong X
-position" symptom is **Hypothesis P6: the shim's 6-element fallback
-leaks a non-zero `blend_type` into my binding's `inverse` slot,
-causing a horizontal mirror on any sprite with a disposed bitmap**.
+After running the morning diagnostics, the winner was
+**Hypothesis P1 with a new twist**: the postload shim's
+`HM7::Tilemap#initialize` wrapper was never installing, because of
+a Ruby visibility gotcha.
 
-The morning's first task: instrument the shim fallback (Step 1 above).
-If it fires, Step 2 is the fix. If it doesn't, move to P1/Step 3.
+### The Ruby gotcha
 
-Step 4 (frame-start `sScreenBitmap` clear) is a no-regrets change that
-should happen regardless of which hypothesis wins, as a correctness
-guarantee.
+`Class#method_defined?(name)` returns `true` only for **public** and
+**protected** instance methods. It does NOT return true for private
+ones. And `initialize` is **always private** in Ruby, regardless of
+how the class declares it:
+
+```ruby
+class Foo
+  def initialize; end  # looks public, but Ruby makes it private
+end
+
+Foo.method_defined?(:initialize)          # => false (!)
+Foo.private_method_defined?(:initialize)  # => true
+```
+
+My shim checked `HM7::Tilemap.method_defined?(:initialize)` and
+silently skipped the patch when it returned `false`. So the 2×-width
+`sScreenBitmap` reallocation never happened; the port was writing
+8-byte slots into a bitmap with pitch = 4 bytes × render_width.
+
+### Why it looked like a positioning / mirror / z-ordering bug all at once
+
+With pitch = `render_w × 4` bytes and slot stride = 8 bytes, only
+`render_w / 2 = 320` column slots fit in each row. Any sprite write
+at `sXt ∈ [320, render_w)` wrapped into the **next row at byte 0**,
+which is equivalent to:
+
+- column slot 0..(sXt - render_w/2) of the next row
+- written at vertical offset `ss_row + 1` for those columns
+
+The symptoms this creates are exactly what the user reported:
+
+- **Left-edge partial sprite**: a sprite rendered at `sXt = 260..323`
+  writes slots 260..319 correctly but wraps slots 320..323 into
+  row (ss_row + 1), columns 0..3. Reading later from row (ss_row+1)
+  col 0..3 sees those pixels and paints them at the screen's left
+  edge.
+- **Sprite appears partially transparent in certain spots**: since
+  the wrapped data corrupted `sScreenData[0]` (the claim flag) at
+  other column slots, the wall-loop's occlusion check
+  (`sScreenData[0] && ... && hbase_packed >= rYt`) wildly
+  misbehaves: sometimes the wall loop thinks a sprite should be
+  drawn there when it shouldn't (ghost at left edge), other times
+  the sprite's own columns are masked by stale claim flags from
+  adjacent columns (transparency artefacts at specific camera
+  angles).
+- **Angle-dependency**: the symptom visibility depended on camera
+  angle because that's what varied `sXt` ranges. At certain angles
+  more sprites crossed the `sXt = 320` wrap boundary, at others
+  none did.
+
+### The fix
+
+Two one-line changes:
+
+1. `scripts/postload/hmode7_shim.rb` — check both `method_defined?`
+   and `private_method_defined?` for `initialize`:
+   ```ruby
+   tilemap_has_init =
+     defined?(HM7::Tilemap) &&
+     (HM7::Tilemap.method_defined?(:initialize) ||
+      HM7::Tilemap.private_method_defined?(:initialize))
+   ```
+   And use `private_method_defined?(:_mkxp_hm7_orig_initialize)`
+   inside the `class_eval` idempotency guard as well.
+2. `binding/hmode7-binding.cpp` — keep the runtime width check as a
+   permanent guard so any future regression of this kind is caught
+   instantly instead of silently corrupting rendering:
+   ```cpp
+   if (!widthWarned && rp.s_screen_bitmap->w != rp.screen_bitmap->w * 2) {
+       mkxp_debugLog("HM7-WARN", ..., "s_screen width=... expected=...");
+   }
+   ```
+
+## Lessons to keep
+
+1. **Never use `method_defined?(:initialize)`** in Ruby. Always
+   prefer `private_method_defined?`, or simpler:
+   `klass.new rescue` + recovery, or `instance_method(:initialize)`.
+2. **Always add a runtime correctness check** for invariants that
+   depend on a Ruby-side monkey-patch landing: if the patch silently
+   fails, the native code often misbehaves in non-obvious ways that
+   look like rendering bugs but are actually data-layout bugs.
+3. **Hypothesis ranking was wrong**: I ranked P6 (shim fallback
+   leaking fields) above P1 (shim reallocation not happening), but
+   P6 never fired (fallback log was empty in actual runs) and P1 was
+   in fact the bug. The lesson: if a hypothesis has a cheap runtime
+   test, promote it above hypotheses that only have code-inspection
+   support.
