@@ -874,16 +874,20 @@ int render_hm7(const RenderParams &pp,
                             (void)colormapData;
                             (void)pos;
                         } else {
-                            blue = mapTilesetData[0];
-                            green = mapTilesetData[1];
-                            red = mapTilesetData[2];
+                            // DIAGNOSTIC: force ground-below-walls green.
+                            blue = 0;
+                            green = 255;
+                            red = 0;
+                            (void)mapTilesetData;
                         }
                         top_flag = 0;
                     } else {
                         top_flag = 1;
-                        blue = mapTilesetData[0];
-                        green = mapTilesetData[1];
-                        red = mapTilesetData[2];
+                        // DIAGNOSTIC: force top-flat-ground blue.
+                        blue = 0;
+                        green = 0;
+                        red = 255;
+                        (void)mapTilesetData;
                     }
 
                     if (lux_d) {
