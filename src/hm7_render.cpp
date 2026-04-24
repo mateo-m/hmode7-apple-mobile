@@ -898,9 +898,42 @@ int render_hm7(const RenderParams &pp,
                             green = colormapData[pos + 1];
                             red = colormapData[pos + 2];
                         } else {
-                            blue = mapTilesetData[0];
-                            green = mapTilesetData[1];
-                            red = mapTilesetData[2];
+                            // Fallback: sample tile at a position
+                            // that interpolates from the anchor's
+                            // ysr (at wall base) toward row 0 (at
+                            // wall top). This reveals whatever art
+                            // is in the tile's upper rows as the
+                            // wall rises, so a 2D tile with roof at
+                            // top and walls at bottom shows roof
+                            // correctly at the wall's top and anchor
+                            // color at the base - approximates the
+                            // multi-cell facade look that v1.2.1
+                            // Windows produces on Insurgence.
+                            //
+                            // Only use this sample if it has alpha>0;
+                            // otherwise fall back to the anchor pixel
+                            // (some tiles have transparent top rows
+                            // and the interpolated row hits those).
+                            int sample_ysr = ysr;
+                            if (dy > 0) {
+                                sample_ysr = ysr - (ysr * (dy - yd)) / dy;
+                                if (sample_ysr < 0) sample_ysr = 0;
+                            }
+                            const int sample_yts = (tileRow << 5) + sample_ysr;
+                            const std::uint8_t *wall_sample = nullptr;
+                            if (sample_yts >= 0 && sample_yts < pp.map_tileset->h) {
+                                wall_sample = byte_row_const(pp.map_tileset, sample_yts)
+                                            + (xts << 2);
+                            }
+                            if (wall_sample && wall_sample[3]) {
+                                blue = wall_sample[0];
+                                green = wall_sample[1];
+                                red = wall_sample[2];
+                            } else {
+                                blue = mapTilesetData[0];
+                                green = mapTilesetData[1];
+                                red = mapTilesetData[2];
+                            }
                         }
                         top_flag = 0;
                     } else {
