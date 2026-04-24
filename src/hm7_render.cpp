@@ -157,14 +157,21 @@ int render_hm7(const RenderParams &pp,
     if (heightLimit > yMin) y0 = heightLimit;
     else y0 = yMin;
 
-    // The original lightline indexing conventions (see HEADER file):
-    //   Row 0 (DIB firstRow) = per-row lighting
-    //   Row -1 (firstRow - pitch) = per-column relief + horizontal zoom
-    //   Row -2 = per-column topmost-drawn-Y (ym) tracking
-    // In top-down SDL these become, respectively, rows 2, 1, 0.
-    std::uint8_t *lightLightRow = byte_row(pp.lightline, 2);  // per-row lux
+    // Lightline rows, laid out top-down to match the Ruby side
+    // which writes the seed fade color via `set_pixel(0, 0, ...)`
+    // - that lands in top-down row 0, column 0. The original
+    // Windows plugin's `firstLightlineRow` points to the same
+    // display pixel (a bottom-up DIB's `firstRow` is display
+    // row 0 = our top-down row 0). Subtracting the DIB pitch in
+    // the original moves DOWN the display; in top-down SDL we
+    // ADD the pitch to move down, i.e. go to a higher row index.
+    //
+    // Row 0: per-row lighting (lux) + col 0 fade seed.
+    // Row 1: per-column relief + horizontal zoom scratch.
+    // Row 2: per-column topmost-drawn-Y (ym) tracking scratch.
+    std::uint8_t *lightLightRow = byte_row(pp.lightline, 0);  // per-row lux
     std::uint8_t *reliefRow     = byte_row(pp.lightline, 1);  // relief
-    std::uint8_t *ymRow         = byte_row(pp.lightline, 0);  // ym tracking
+    std::uint8_t *ymRow         = byte_row(pp.lightline, 2);  // ym tracking
 
     // Bootstrap sCmin/sCmax for pre-surface pass (used only when
     // yt == yMax-1 sInitZoomData gate fires).
