@@ -894,23 +894,16 @@ int render_hm7(const RenderParams &pp,
                             totHA_i = dA[itLayer];
                         }
                         if (!ground && colormapData && colormapData[pos + 3]) {
+                            // DIAG: red-tint pixels that came from the
+                            // colormap (= tile has a texturemap).
                             blue = colormapData[pos];
                             green = colormapData[pos + 1];
-                            red = colormapData[pos + 2];
+                            red = std::min(colormapData[pos + 2] + 100, 255);
                         } else {
-                            // Per MGC's description: "By default,
-                            // when drawing a screen pixel, all pixels
-                            // between the 'ground' (altitude 0) and
-                            // the computed altitude are filled with
-                            // the color of the target pixel." So
-                            // walls are uniform columns using the
-                            // tile's anchor pixel color. The fix for
-                            // the "inelegant vertical walls" problem
-                            // is a per-tile texture file (handled by
-                            // the colormap branch above), NOT a
-                            // special stretching algorithm.
+                            // DIAG: green-tint pixels that fell back
+                            // to flat tile color.
                             blue = mapTilesetData[0];
-                            green = mapTilesetData[1];
+                            green = std::min(mapTilesetData[1] + 100, 255);
                             red = mapTilesetData[2];
                         }
                         top_flag = 0;
