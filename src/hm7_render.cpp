@@ -476,15 +476,21 @@ int render_hm7(const RenderParams &pp,
                                     red = (sScreenData[6] * sOpacity) >> 8;
                                 }
                             }
-                            screenData[0] = static_cast<std::uint8_t>(blue);
-                            screenData[1] = static_cast<std::uint8_t>(green);
-                            screenData[2] = static_cast<std::uint8_t>(red);
-                            screenData[3] = sScreenData[7];
+                            // DIAGNOSTIC: off-map-loopX surface-composite CYAN.
+                            (void)blue; (void)green; (void)red;
+                            screenData[0] = 0;
+                            screenData[1] = 255;
+                            screenData[2] = 255;
+                            screenData[3] = 255;
                             sScreenData[0] = 0;
                             ylp[0] = (rYt >> 8) & 0xff;
                             ylp[1] = (rYt - (ylp[0] << 8)) & 0xff;
                             continue;
                         }
+                        // DIAGNOSTIC: off-map-loopX transparent -> orange.
+                        screenData[0] = 255;
+                        screenData[1] = 128;
+                        screenData[2] = 0;
                         screenData[3] = 0;
                     }
                     if (rYt < ym) {
@@ -522,15 +528,21 @@ int render_hm7(const RenderParams &pp,
                                     red = (sScreenData[6] * sOpacity) >> 8;
                                 }
                             }
-                            screenData[0] = static_cast<std::uint8_t>(blue);
-                            screenData[1] = static_cast<std::uint8_t>(green);
-                            screenData[2] = static_cast<std::uint8_t>(red);
-                            screenData[3] = sScreenData[7];
+                            // DIAGNOSTIC: off-map-loopY surface-composite PURPLE.
+                            (void)blue; (void)green; (void)red;
+                            screenData[0] = 128;
+                            screenData[1] = 0;
+                            screenData[2] = 128;
+                            screenData[3] = 255;
                             sScreenData[0] = 0;
                             ylp[0] = (rYt >> 8) & 0xff;
                             ylp[1] = (rYt - (ylp[0] << 8)) & 0xff;
                             continue;
                         }
+                        // DIAGNOSTIC: off-map-loopY transparent -> gray.
+                        screenData[0] = 128;
+                        screenData[1] = 128;
+                        screenData[2] = 128;
                         screenData[3] = 0;
                     }
                     if (rYt < ym) {
@@ -811,7 +823,8 @@ int render_hm7(const RenderParams &pp,
                 }
 
                 if (yd < dy && yt + 1 == yMax && !noBlack) {
-                    screenData[0] = 0; screenData[1] = 0; screenData[2] = 0; screenData[3] = 255;
+                    // DIAGNOSTIC: explicit-black path now orange.
+                    screenData[0] = 255; screenData[1] = 128; screenData[2] = 0; screenData[3] = 255;
                     sScreenData[0] = 0;
                 } else {
                     if (dy - yd > 0) {
@@ -954,6 +967,11 @@ int render_hm7(const RenderParams &pp,
                 sScreenData[0] = 0;
                 continue;
             }
+            // DIAGNOSTIC: final-overdraw transparent-path -> teal RGB
+            // so we can tell it apart from any leftover content.
+            screenData[0] = 0;
+            screenData[1] = 128;
+            screenData[2] = 128;
             screenData[3] = 0;
         }
     }
