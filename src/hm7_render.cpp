@@ -898,42 +898,20 @@ int render_hm7(const RenderParams &pp,
                             green = colormapData[pos + 1];
                             red = colormapData[pos + 2];
                         } else {
-                            // Fallback: sample the 2D tile art along
-                            // an interpolation from row 0 (at wall
-                            // base) toward the anchor's ysr (at wall
-                            // top). This reveals vertical detail
-                            // hidden in the tile art (stair steps,
-                            // building facades, etc.) that would
-                            // otherwise extrude as a single uniform
-                            // column. Wall opacity still follows the
-                            // sampled pixel's alpha so silhouettes
-                            // respect the tile's transparent borders.
-                            //
-                            // When the sampled pixel happens to land
-                            // on a transparent part of the tile art,
-                            // fall back to the anchor pixel so we
-                            // don't bite out chunks of the building
-                            // silhouette.
-                            int sample_ysr = ysr;
-                            if (dy > 0) {
-                                sample_ysr = ysr - (ysr * (dy - yd)) / dy;
-                                if (sample_ysr < 0) sample_ysr = 0;
-                            }
-                            const int sample_yts = (tileRow << 5) + sample_ysr;
-                            const std::uint8_t *wall_sample = nullptr;
-                            if (sample_yts >= 0 && sample_yts < pp.map_tileset->h) {
-                                wall_sample = byte_row_const(pp.map_tileset, sample_yts)
-                                            + (xts << 2);
-                            }
-                            if (wall_sample && wall_sample[3]) {
-                                blue = wall_sample[0];
-                                green = wall_sample[1];
-                                red = wall_sample[2];
-                            } else {
-                                blue = mapTilesetData[0];
-                                green = mapTilesetData[1];
-                                red = mapTilesetData[2];
-                            }
+                            // Per MGC's description: "By default,
+                            // when drawing a screen pixel, all pixels
+                            // between the 'ground' (altitude 0) and
+                            // the computed altitude are filled with
+                            // the color of the target pixel." So
+                            // walls are uniform columns using the
+                            // tile's anchor pixel color. The fix for
+                            // the "inelegant vertical walls" problem
+                            // is a per-tile texture file (handled by
+                            // the colormap branch above), NOT a
+                            // special stretching algorithm.
+                            blue = mapTilesetData[0];
+                            green = mapTilesetData[1];
+                            red = mapTilesetData[2];
                         }
                         top_flag = 0;
                     } else {
