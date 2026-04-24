@@ -293,6 +293,25 @@ int render_hm7(const RenderParams &pp,
                             std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
                             sFYt = (lr[sType] << 8) + lr[sType + 1];
                             sFYth = (lr[0] << 8) + lr[1];
+                            // Top-down degenerate case: when the slant
+                            // angle alpha is 0, compute_m7 writes
+                            // (a * sinAngle / xp0) = ~0 into relief
+                            // [0..1], which makes sFYt=0 and
+                            // sRealHeight=0, causing the inline
+                            // sprite pass to `continue` and never
+                            // render any column. Fall back to the
+                            // horizontal zoom in relief [2..3] so
+                            // sprites render at ground scale in
+                            // top-down view. For alpha>0 this branch
+                            // is never taken (sFYt from relief grows
+                            // with sinAngle), so non-top-down scenes
+                            // are unaffected.
+                            if (sFYt == 0) {
+                                sFYt = (lr[2] << 8) + lr[3];
+                            }
+                            if (sFYth == 0) {
+                                sFYth = (lr[2] << 8) + lr[3];
+                            }
                             sHbase = sH0;
                         }
 
@@ -673,6 +692,19 @@ int render_hm7(const RenderParams &pp,
                                 std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
                                 sFYt = (lr[sType] << 8) + lr[sType + 1];
                                 sFYth = (lr[0] << 8) + lr[1];
+                                // Top-down fallback. See the pre-pass
+                                // for the full rationale; in short,
+                                // compute_m7's vertical zoom formula
+                                // degenerates to 0 when slant alpha
+                                // is 0, which would skip every sprite
+                                // column. Reuse the horizontal zoom
+                                // as a natural-scale fallback.
+                                if (sFYt == 0) {
+                                    sFYt = (lr[2] << 8) + lr[3];
+                                }
+                                if (sFYth == 0) {
+                                    sFYth = (lr[2] << 8) + lr[3];
+                                }
                                 sHbase = sH0;
                             }
 
