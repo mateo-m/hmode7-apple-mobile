@@ -141,9 +141,10 @@ Previously high-priority items that are now done:
       root cause was a Ruby `method_defined?(:initialize)` visibility
       gotcha that silently skipped the shim's reallocation patch)
 - [x] Buildings show proper wall textures matching the Windows reference
-      (see `docs/V121_WALL_LAYER_FIX.md` — Insurgence ships the
-      pre-v1.3 DLL whose wall-loop layer selection accumulates
-      heights FROM THE TOP, not bottom-up cumulatively like v1.4.4)
+      (the wall-loop layer selection is now switchable between
+      pre-v1.3 DLL behaviour (top-cumulative, default, matches
+      Insurgence) and v1.4.4 reference behaviour (bottom-cumulative,
+      opt-in for v1.4+ games). See `docs/WALL_LAYER_MODE.md`.)
 
 ## How to resume / verify
 
