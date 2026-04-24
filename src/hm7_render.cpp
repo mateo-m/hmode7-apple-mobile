@@ -865,9 +865,14 @@ int render_hm7(const RenderParams &pp,
                             totHA_i = dA[itLayer];
                         }
                         if (!ground && colormapData && colormapData[pos + 3]) {
-                            blue = colormapData[pos];
-                            green = colormapData[pos + 1];
-                            red = colormapData[pos + 2];
+                            // DIAGNOSTIC: force wall pixels bright red so
+                            // we can tell whether the white shapes come
+                            // from the wall-rendering path or elsewhere.
+                            blue = 255;  // = R in RGBA
+                            green = 0;
+                            red = 0;
+                            (void)colormapData;
+                            (void)pos;
                         } else {
                             blue = mapTilesetData[0];
                             green = mapTilesetData[1];
