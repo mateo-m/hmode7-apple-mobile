@@ -894,12 +894,17 @@ int render_hm7(const RenderParams &pp,
                             totHA_i = dA[itLayer];
                         }
                         if (!ground && colormapData && colormapData[pos + 3]) {
+                            // DIAG: tint wall-texture path red-added so
+                            // we can see at a glance which pixels come
+                            // from the colormap vs fell through.
                             blue = colormapData[pos];
                             green = colormapData[pos + 1];
-                            red = colormapData[pos + 2];
+                            red = std::min(colormapData[pos + 2] + 80, 255);
                         } else {
+                            // DIAG: tint fallback path green-added so
+                            // "teal house" walls become bright cyan.
                             blue = mapTilesetData[0];
-                            green = mapTilesetData[1];
+                            green = std::min(mapTilesetData[1] + 80, 255);
                             red = mapTilesetData[2];
                         }
                         top_flag = 0;
