@@ -4,6 +4,25 @@ Snapshot of what's done, what's next, and the known caveats so this
 can be resumed cleanly in a future session (possibly by a different
 coder / agent). Updated after full port + mkxp-z integration.
 
+## CRITICAL: Where to edit this port
+
+Edit `.cpp` / `.h` files in **the git submodule at
+`mkxp-z-apple-mobile/hmode7/src/`**, NOT in any other local clone.
+Commit from the submodule working tree, push to `origin/main`, then
+bump the parent-repo submodule pointer.
+
+A preBuildScript in `ios/Empo/project.yml`
+(`Verify hmode7 submodule is up to date`) fails the Xcode build if
+either (a) the submodule has uncommitted changes or (b) its HEAD
+differs from `origin/main`. If you see that error, commit / push /
+pull inside the submodule, then retry the build.
+
+Historical context: during the bring-up, a duplicate clone at
+`/tmp/hmode7-apple-mobile` was being edited in parallel with the
+submodule. The build silently compiled the stale submodule copy,
+which hid already-made fixes for multiple iterations. The pre-
+build verification exists to make that class of bug fail loudly.
+
 ## Status
 
 **Completed** — all 9 functions ported, Ruby binding layer written,
