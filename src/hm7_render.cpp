@@ -280,38 +280,42 @@ int render_hm7(const RenderParams &pp,
                         int sLux_b = 0, sLux_g = 0, sLux_r = 0, sLux_d = 0;
                         int sFYt, sFYth, sHbase;
                         if (sH0 < 0) {
-                            if (sType) {
-                                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
-                            } else {
-                                sFYt = sCmin + (sCsl * (yt - sH0 - y0)) / (yMax - 1 - y0);
-                            }
-                            sFYth = sCminHT0 + (sCslHT0 * (yt - sH0 - y0)) / (yMax - 1 - y0);
+                            // Billboards use depth-scale (HT2)
+                            // regardless of sType. See the else
+                            // branch for the full rationale.
+                            sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
+                            sFYth = sFYt;
                             sHbase = 0;
                         } else {
                             std::uint8_t *ll = lightLightRow + ((yt - sH0) << 2);
                             sLux_b = ll[0]; sLux_g = ll[1]; sLux_r = ll[2]; sLux_d = ll[3];
                             std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
-                            sFYt = (lr[sType] << 8) + lr[sType + 1];
-                            sFYth = (lr[0] << 8) + lr[1];
-                            // Top-down degenerate case: when the slant
-                            // angle alpha is 0, compute_m7 writes
-                            // (a * sinAngle / xp0) = ~0 into relief
-                            // [0..1], which makes sFYt=0 and
-                            // sRealHeight=0, causing the inline
-                            // sprite pass to `continue` and never
-                            // render any column. Fall back to the
-                            // horizontal zoom in relief [2..3] so
-                            // sprites render at ground scale in
-                            // top-down view. For alpha>0 this branch
-                            // is never taken (sFYt from relief grows
-                            // with sinAngle), so non-top-down scenes
-                            // are unaffected.
-                            if (sFYt == 0) {
-                                sFYt = (lr[2] << 8) + lr[3];
-                            }
-                            if (sFYth == 0) {
-                                sFYth = (lr[2] << 8) + lr[3];
-                            }
+                            // Sprites are BILLBOARDS. They always
+                            // face the camera: they rotate with
+                            // theta but never tilt with alpha. That
+                            // means the on-screen sprite height must
+                            // scale with DEPTH (perspective divisor
+                            // `xp0`) alone, not with the slant angle.
+                            //
+                            // `relief[0..1]` holds `a * sinAngle /
+                            // xp0` (slant-projected scale). That is
+                            // correct for vertical WALLS which
+                            // shrink at shallow slants, but wrong
+                            // for billboard sprites - at slant=0
+                            // (top-down) this collapses to 0 and at
+                            // shallow slants it squishes the sprite.
+                            //
+                            // `relief[2..3]` holds `(a << 12) / xp0`
+                            // (pure depth scale, Q12). That's the
+                            // right number for billboard scaling,
+                            // and what the original plugin
+                            // effectively wanted here - the user-
+                            // observable behaviour on Windows is
+                            // billboards that stay full-height at
+                            // every alpha, only rotating with theta.
+                            const int depthZoom = (lr[2] << 8) + lr[3];
+                            sFYt = depthZoom;
+                            sFYth = depthZoom;
                             sHbase = sH0;
                         }
 
@@ -682,29 +686,22 @@ int render_hm7(const RenderParams &pp,
                             int sLux_b = 0, sLux_g = 0, sLux_r = 0, sLux_d = 0;
                             int sFYt, sFYth, sHbase;
                             if (sH0 < 0) {
-                                if (sType) sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
-                                else       sFYt = sCminHT0 + (sCslHT0 * (yt - sH0 - y0)) / (yMax - 1 - y0);
+                                // Billboards use depth-scale (HT2).
+                                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
                                 sFYth = sFYt;
                                 sHbase = 0;
                             } else {
                                 std::uint8_t *ll = lightLightRow + ((yt - sH0) << 2);
                                 sLux_b = ll[0]; sLux_g = ll[1]; sLux_r = ll[2]; sLux_d = ll[3];
                                 std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
-                                sFYt = (lr[sType] << 8) + lr[sType + 1];
-                                sFYth = (lr[0] << 8) + lr[1];
-                                // Top-down fallback. See the pre-pass
-                                // for the full rationale; in short,
-                                // compute_m7's vertical zoom formula
-                                // degenerates to 0 when slant alpha
-                                // is 0, which would skip every sprite
-                                // column. Reuse the horizontal zoom
-                                // as a natural-scale fallback.
-                                if (sFYt == 0) {
-                                    sFYt = (lr[2] << 8) + lr[3];
-                                }
-                                if (sFYth == 0) {
-                                    sFYth = (lr[2] << 8) + lr[3];
-                                }
+                                // Sprites are billboards: use the
+                                // depth-proportional zoom from
+                                // relief[2..3], not the slant-
+                                // projected relief[0..1]. See the
+                                // pre-pass for the full rationale.
+                                const int depthZoom = (lr[2] << 8) + lr[3];
+                                sFYt = depthZoom;
+                                sFYth = depthZoom;
                                 sHbase = sH0;
                             }
 
