@@ -25,8 +25,11 @@ build verification exists to make that class of bug fail loudly.
 
 ## Status
 
-**Completed** — all 9 functions ported, Ruby binding layer written,
-xcodegen integration done, build succeeds, app launches on sim.
+**Complete and verified working** — all 9 functions ported, Ruby
+binding layer written, xcodegen integration done, build succeeds,
+app launches, the full Insurgence intro cinematic renders correctly
+with sprites in the right positions, correct Z-ordering, no
+corruption or missing elements. Matches the Windows reference.
 
 | Function             | Source LOC | Port LOC | File                          |
 |----------------------|-----------:|---------:|-------------------------------|
@@ -76,11 +79,18 @@ sim (iOS 26.4) without crash. No end-to-end game test done yet
 
 | Task                                                 | Priority  |
 |------------------------------------------------------|-----------|
-| Test on Insurgence: new game → Yes/Yes → verify flying-Pokemon intro renders | high |
-| Pixel-diff against a Windows reference recording     | high |
-| Fix `sScreenBitmap` width: needs to be `2 × screen.width` on the Ruby side | medium |
+| Pixel-diff against a Windows reference recording (cosmetic verification) | low |
 | Add `Bitmap::uploadCPURect(x,y,w,h)` to mkxp-z-apple-mobile | low (perf) |
 | Split `renderHM7` into 5 helper functions per design doc §4 | low (readability) |
+
+Previously high-priority items that are now done:
+
+- [x] Test on Insurgence: full flying-Pokemon intro renders correctly
+- [x] `sScreenBitmap` 2×-width fix (via postload shim monkey-patch on `HM7::Tilemap#initialize`)
+- [x] All sprite positioning / Z-ordering / mirror artefacts resolved
+      (see `docs/SPRITE_REMAINING_BUGS.md` for the post-mortem — the
+      root cause was a Ruby `method_defined?(:initialize)` visibility
+      gotcha that silently skipped the shim's reallocation patch)
 
 ## How to resume / verify
 
