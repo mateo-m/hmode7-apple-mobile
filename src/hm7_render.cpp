@@ -912,29 +912,9 @@ int render_hm7(const RenderParams &pp,
                         red = clamp_u8(red);
                     }
 
-                    if (sScreenData[0] && sScreenData[2] + sScreenData[3] >= rYt) {
-                        const int blend = sScreenData[1];
-                        const int sOpacity = sScreenData[7];
-                        if (blend == 0) {
-                            blue = (blue * (255 - sOpacity) + sScreenData[4] * sOpacity) >> 8;
-                            green = (green * (255 - sOpacity) + sScreenData[5] * sOpacity) >> 8;
-                            red = (red * (255 - sOpacity) + sScreenData[6] * sOpacity) >> 8;
-                        } else if (blend == 1) {
-                            blue += (sScreenData[4] * sOpacity) >> 8;
-                            green += (sScreenData[5] * sOpacity) >> 8;
-                            red += (sScreenData[6] * sOpacity) >> 8;
-                            blue = std::min(blue, 255);
-                            green = std::min(green, 255);
-                            red = std::min(red, 255);
-                        } else if (blend == 2) {
-                            blue -= (sScreenData[4] * sOpacity) >> 8;
-                            green -= (sScreenData[5] * sOpacity) >> 8;
-                            red -= (sScreenData[6] * sOpacity) >> 8;
-                            blue = std::max(blue, 0);
-                            green = std::max(green, 0);
-                            red = std::max(red, 0);
-                        }
-                    }
+                    // DIAGNOSTIC: skip surface-composite to test whether
+                    // the white artifacts come from here.
+                    (void)sScreenData;
 
                     screenData[0] = static_cast<std::uint8_t>(blue);
                     screenData[1] = static_cast<std::uint8_t>(green);
