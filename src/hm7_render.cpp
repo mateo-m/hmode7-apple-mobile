@@ -898,47 +898,9 @@ int render_hm7(const RenderParams &pp,
                             green = colormapData[pos + 1];
                             red = colormapData[pos + 2];
                         } else {
-                            // Fallback: sample the 2D tile's art at
-                            // different vertical positions as we
-                            // climb the wall column. Without this,
-                            // tiles that don't ship a per-tile
-                            // _Textures/Texture_XXX.png wall-texture
-                            // render as uniform "roof-color" blocks
-                            // (the anchor tile pixel extruded
-                            // upward). Insurgence's tileset draws
-                            // building facades directly into the 2D
-                            // tile art - a house tile has roof at
-                            // rows 0..15 and walls/door at rows
-                            // 16..31 - so stretching the tile's
-                            // vertical art across the wall height
-                            // makes those facades visible in mode7
-                            // perspective even when no separate
-                            // wall-texture file is provided.
-                            //
-                            // At yd == dy (top of wall = lifted top
-                            // of tile): sample ysr (anchor),
-                            // preserving the anchor column. At
-                            // yd == 0 (wall base = ground level):
-                            // sample (ysr + dy) & 31, showing
-                            // "what's below" in the tile art if we
-                            // imagine the tile extending downward.
-                            // Wrap at 32 so tall walls repeat the
-                            // tile tile-style rather than clamping
-                            // to the bottom row.
-                            const int sample_ysr = (ysr + (dy - yd)) & 31;
-                            const int sample_yts = (tileRow << 5) + sample_ysr;
-                            if (sample_yts >= 0 && sample_yts < pp.map_tileset->h) {
-                                const std::uint8_t *tsample =
-                                    byte_row_const(pp.map_tileset, sample_yts)
-                                    + (xts << 2);
-                                blue = tsample[0];
-                                green = tsample[1];
-                                red = tsample[2];
-                            } else {
-                                blue = mapTilesetData[0];
-                                green = mapTilesetData[1];
-                                red = mapTilesetData[2];
-                            }
+                            blue = mapTilesetData[0];
+                            green = mapTilesetData[1];
+                            red = mapTilesetData[2];
                         }
                         top_flag = 0;
                     } else {
