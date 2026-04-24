@@ -23,7 +23,8 @@
 #include <SDL_surface.h>
 
 #include "bitmap.h"  // mkxp-z Bitmap
-#include "etc.h"     // mkxp-z Table / IntRect
+#include "table.h"   // mkxp-z Table (etc.h forward-declares only)
+#include "etc.h"     // mkxp-z IntRect
 #include "binding-util.h"  // getPrivateData<>()
 
 namespace hm7 {
@@ -55,7 +56,8 @@ void bitmap_commit(VALUE value) {
     SDL_Surface *surf = b->surface();
     if (!surf) return;
     const int bytes = surf->w * surf->h * 4;
-    b->replaceRaw(static_cast<const char *>(surf->pixels), bytes);
+    // surf->pixels is void*; replaceRaw accepts void* directly.
+    b->replaceRaw(surf->pixels, bytes);
 }
 
 void bitmap_commit_rect(VALUE value, int x, int y, int w, int h) {
