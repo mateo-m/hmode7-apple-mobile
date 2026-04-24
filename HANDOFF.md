@@ -79,9 +79,55 @@ sim (iOS 26.4) without crash. No end-to-end game test done yet
 
 | Task                                                 | Priority  |
 |------------------------------------------------------|-----------|
+| Investigate wall detail on specific non-textured buildings (see "Known limitations" below) | low |
 | Pixel-diff against a Windows reference recording (cosmetic verification) | low |
 | Add `Bitmap::uploadCPURect(x,y,w,h)` to mkxp-z-apple-mobile | low (perf) |
 | Split `renderHM7` into 5 helper functions per design doc §4 | low (readability) |
+
+## Known limitations / open questions
+
+**Specific buildings missing wall detail when viewed in 3D mode7
+perspective**: some buildings (e.g. a teal-roofed house in a town at
+the end of the intro cinematic) render as flat-colored blobs on
+Empo while showing detailed gray walls, windows, and doors on
+Windows.
+
+Root cause is that Insurgence ships `_Textures/Texture_XXX.png`
+files only for ~42 out of ~257 unique tiles in the intro tileset.
+Tiles without a texture file fall back to using the tile's base
+color (2D tileset graphic's pixel at the anchor position) for all
+their "wall" pixels, so the building renders as a uniform colored
+block regardless of camera angle.
+
+What's unclear: whether Windows actually renders those same tiles
+identically (and the user's reference screenshot shows a different
+tile that DOES have a texture file), or whether the Windows plugin
+has a mechanism we're missing that produces the detailed walls
+from just the 2D tileset graphic without a per-tile texture file.
+
+Confirmed working:
+- Tiles WITH texture files (42 of them) render walls correctly.
+  The red house in the user's same screenshot shows its door and
+  gray walls properly — that's tile T207 in the populated tile
+  list.
+- Colormap atlas is correctly populated (8224-row mega surface,
+  strips 1-4 contain valid wall-direction textures for the 42
+  tiles).
+
+Investigation entry point for a future session:
+1. Dump a PPM of the exact frame showing a "missing-detail"
+   building.
+2. Correlate one of its screen pixels back to a tile index.
+3. If that tile IS in the 42-populated list → my port has a
+   specific-tile bug reading that tile's strips. Investigate
+   further with `(ti, ysr, xsr, oColor, pos)` logging.
+4. If that tile is NOT in the populated list → Insurgence
+   genuinely ships no texture for it and Windows's detailed
+   appearance comes from some other mechanism. Possibilities:
+   - A multi-tile map composition where the "wall" part is a
+     separate adjacent map cell with its own textured tile.
+   - Tile metadata heights we're interpreting differently.
+   - The Windows screenshot being at a different camera pose.
 
 Previously high-priority items that are now done:
 
