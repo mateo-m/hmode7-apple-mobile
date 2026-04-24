@@ -92,10 +92,15 @@ std::int16_t *table_data(VALUE value,
     if (out_xsize) *out_xsize = t->xSize();
     if (out_ysize) *out_ysize = t->ySize();
     if (out_zsize) *out_zsize = t->zSize();
-    // mkxp-z's Table exposes its backing `int16_t*` via `ptr()`
-    // (returned by `getData()` in some branches). Both are
-    // contiguous `z*y*x` int16_t arrays.
-    return t->getData();
+    // mkxp-z's Table keeps its storage as a private `std::vector`.
+    // The public `at()` accessor returns a reference into that
+    // vector, so taking its address gives us a raw pointer to the
+    // contiguous `z*y*x` int16_t backing buffer. Guarded by the
+    // empty-table check to avoid UB on zero-sized tables.
+    if (t->xSize() == 0 || t->ySize() == 0 || t->zSize() == 0) {
+        return nullptr;
+    }
+    return &t->at(0, 0, 0);
 }
 
 int array_to_ints(VALUE array, int *out, int max_count) {
@@ -128,7 +133,7 @@ struct HashIterContext {
     void *user_data;
 };
 
-int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
+extern "C" int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
     HashIterContext *ctx = reinterpret_cast<HashIterContext *>(ctx_value);
     if (!FIXNUM_P(key)) return ST_CONTINUE;
     if (NIL_P(val) || !RB_TYPE_P(val, T_ARRAY)) return ST_CONTINUE;
@@ -148,8 +153,7 @@ int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
 void hash_each_tile(VALUE hash, TileHashCallback cb, void *user_data) {
     if (NIL_P(hash) || !RB_TYPE_P(hash, T_HASH)) return;
     HashIterContext ctx = { cb, user_data };
-    rb_hash_foreach(hash, reinterpret_cast<int (*)(...)>(hash_iter_cb),
-                    reinterpret_cast<VALUE>(&ctx));
+    rb_hash_foreach(hash, hash_iter_cb, reinterpret_cast<VALUE>(&ctx));
 }
 
 int fixnum_to_int(VALUE value) {
