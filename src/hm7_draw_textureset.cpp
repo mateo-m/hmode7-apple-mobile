@@ -72,7 +72,7 @@ inline const std::uint8_t *byte_row_const(const SDL_Surface *surf, int y) {
 }
 
 // Bounds-safe row+column accessors that return nullptr on OOB so
-// the copy loops can simply `if (!ptr) continue;` past bad coords
+// the copy loops can `if (!ptr) continue;` past bad coords
 // (e.g. near the atlas edge, or tiles near 0 that would index
 // negative rows).
 inline std::uint8_t *dst_at(SDL_Surface *surf, int row, int col_px) {

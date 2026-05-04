@@ -83,7 +83,7 @@ int compute_m7(std::int16_t *data_table,
     std::uint8_t *reliefRowBytes   = lightBytes + 1 * lightPitch;  // row 1
 
     // Seed lux values from lightline[row=0, col=0] = fade color. The
-    // per-byte semantics are simply: byte 0/1/2 are the color values
+    // per-byte semantics: byte 0/1/2 are the color values
     // the original called B/G/R (the channel order is irrelevant for
     // the later per-screen-row attenuation math - what matters is
     // that whatever we read here gets stored at the same byte index
