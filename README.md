@@ -1,90 +1,52 @@
 # hmode7-apple-mobile
 
-Port of MGC's **H-Mode7** RPG Maker XP plugin to mkxp-z on Apple
-mobile platforms (iOS, iPadOS, tvOS).
+> Native port of MGC's H-Mode7 RPG Maker XP plugin to mkxp-z on Apple mobile platforms.
 
-H-Mode7 is a pseudo-3D rotating-perspective renderer — it adds
-slanted top-down maps with zoom, rotation, and heightmap-based terrain
-elevation to RPG Maker XP. Games using it include Pokemon Insurgence
-(the flying Pelipper intro over the Torren region, several other
-cutscenes) and other fan games shipped via save-point.org.
+[![License](https://img.shields.io/badge/license-permissive-blue.svg)](#license)
+[![Status](https://img.shields.io/badge/status-complete-brightgreen.svg)](#status)
 
-The original plugin is distributed as a Windows-only native DLL
-(`MGC_Hmode7.dll`), which means no game using H-Mode7 renders correctly
-on iOS, Android, macOS, or any non-Windows port. This repository is a
-clean-room re-port targeting Ruby 3.1 / mkxp-z's `Bitmap` and `Table`
-APIs, so the plugin's pixel-math runs as a module linked directly into
-the engine instead of via `Win32API.new(...)`.
+H-Mode7 is a pseudo-3D rotating-perspective renderer. It adds slanted top-down maps with zoom, rotation, and heightmap-based terrain elevation to RPG Maker XP. Pokemon Insurgence uses it for its flying-Pelipper intro across the Torren region; other fan games use it for cutscenes and overworld effects.
 
-## Scope
+The original plugin ships as a Windows-only native DLL (`MGC_Hmode7.dll`), which means no game using H-Mode7 renders correctly on iOS, Android, macOS, or any non-Windows port. This repo is a clean-room re-port targeting Ruby 3.1 / mkxp-z's `Bitmap` and `Table` APIs, so the plugin's pixel-math runs as a module linked directly into the engine instead of via `Win32API.new(...)`.
 
-All nine H-Mode7 exports are covered, for both the pre-V1.3 (8-export)
-and V1.4+ (9-export) DLL eras:
+## Highlights
 
-- `applyOpacity`, `applyZoom`, `applyLighting`
-- `computeM7`, `drawHeightmap`, `drawTextureset`
-- `drawMapTileset`, `refreshMapTileset`
-- `renderHM7` (the main rasterizer, ~1000 lines in the reference)
-
-The port is in a single namespace `hm7::` and a companion Ruby binding
-module `HM7::Native` that the mkxp-z engine loads so scripts calling
-`HM7.render_hm7(...)` (etc.) dispatch natively.
+- **Drop-in replacement for `MGC_Hmode7.dll`.** Games keep their original Ruby scripts; `HM7.render_hm7(...)` (etc.) dispatches to the native module via mkxp-z's binding layer.
+- **Two-DLL-era support.** Auto-detects whether a game shipped a pre-V1.3 (8-export) or V1.4+ (9-export) DLL and switches the wall-layer-selection algorithm accordingly. See [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md).
+- **Verified against Pokemon Insurgence.** The full intro cinematic renders matching the Windows reference: wall textures, Z-ordering, billboard sprites, horizon fading, heightmap relief, autotile animation, and multi-layer tile-facade rendering for buildings.
+- **No GPU.** Per-pixel, per-scanline software rasterization. Reads and writes directly into mkxp-z `Bitmap` pixel buffers and syncs back to the GL texture once per frame.
 
 ## Status
 
-**Complete and verified.** The full Pokemon Insurgence intro cinematic
-renders matching the Windows reference, including wall textures,
-Z-ordering, billboard sprites, horizon fading, heightmap relief,
-autotile animation, and the multi-layer tile-facade rendering that
-makes buildings look correct.
+Complete and verified. All nine H-Mode7 exports are covered, for both DLL eras:
 
-Auto-detection of the HM7 version era is built into the postload shim,
-so a game shipping a pre-V1.3 DLL (like Insurgence) and a game
-shipping a V1.4+ DLL both render correctly without manual
-configuration. See
-[`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md) for the
-algorithm difference.
+| Export | Role |
+|---|---|
+| `applyOpacity`, `applyZoom`, `applyLighting` | Per-bitmap pixel transforms |
+| `computeM7` | Mode-7 projection LUT builder |
+| `drawHeightmap` | Per-pixel terrain heightmap |
+| `drawTextureset` | Wall-strip splatter |
+| `drawMapTileset`, `refreshMapTileset` | Per-cell composited tileset |
+| `renderHM7` | Main per-scanline rasterizer (~1000 LOC in the reference) |
 
 ## Documents
 
-- [`docs/HMODE7_PORT_DESIGN.md`](docs/HMODE7_PORT_DESIGN.md) —
-  technical design: algorithm summary per exported function, data-
-  shape diagrams, per-function porting complexity, per-pixel wall
-  rasterization math.
-- [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md) — explains the
-  two wall-layer selection algorithms (top-cumulative vs
-  bottom-cumulative), how the port auto-detects which to use, and
-  when to override it.
-- [`reference/MGC_Hmode7_1_4_4.cpp`](reference/MGC_Hmode7_1_4_4.cpp)
-  — MGC's unmodified V1.4.4 source for diffing.
+- [`docs/HMODE7_PORT_DESIGN.md`](docs/HMODE7_PORT_DESIGN.md): technical design with per-function algorithm summary, data-shape diagrams, porting complexity, and per-pixel wall rasterization math.
+- [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md): the two wall-layer selection algorithms (top-cumulative vs bottom-cumulative), how the port auto-detects which to use, and when to override.
+- [`reference/MGC_Hmode7_1_4_4.cpp`](reference/MGC_Hmode7_1_4_4.cpp): MGC's unmodified V1.4.4 source, included verbatim for diffing.
 
-## Credits & upstream
+## How to integrate
 
-Original **H-Mode7 Engine** by MGC (MGCaladtogel), V1.4.4, 2011.
-Heightmap cache by DerVVulfman. Distributed via the RPG Maker XP
-community at save-point.org.
+This port is designed to ship as part of the [mkxp-z-apple-mobile](https://github.com/mateo-m/mkxp-z-apple-mobile) engine used by [Empo](https://github.com/mateo-m/empo-app). The engine consumes it as a git submodule; the Ruby binding registers `HM7::Native` at engine init, and a postload shim auto-detects the DLL era to set `HM7::Native::WALL_LAYER_MODE`.
 
-Original thread (releases, discussion, help-file for textures):
-
-- <https://www.save-point.org/thread-3151.html>
-- Archived snapshot:
-  <https://web.archive.org/web/20260424175813/https://www.save-point.org/thread-3151.html>
-
-The reference `MGC_Hmode7_1_4_4.cpp` source file in this repository
-is MGC's own release, included verbatim for diffing. This fork exists
-to make H-Mode7 portable to non-Windows targets. Any bugs introduced
-by the port are ours; the underlying algorithm and math are MGC's
-work.
+Adapting to other mkxp-z-based engines requires minor build-system changes (the `cpp` files compile with the engine's binding layer; nothing platform-specific).
 
 ## License
 
-Following the original plugin's distribution terms from save-point.org,
-this fork is released under the same permissive-but-credit-required
-terms. See the original thread for MGC's licensing statement.
+Following the original plugin's distribution terms from save-point.org, this port is released under the same permissive-but-credit-required terms as MGC's original. See the [original thread](https://www.save-point.org/thread-3151.html) for MGC's licensing statement.
 
-## Integration target
+## Credits
 
-This port is designed to ship as part of the
-[mkxp-z-apple-mobile](https://github.com/mateo-m/mkxp-z-apple-mobile)
-engine used by the Empo iOS RPG Maker player. It can be adapted to
-other mkxp-z-based engines with minor build-system changes.
+- **H-Mode7 Engine** by [MGC](https://www.save-point.org/thread-3151.html) (MGCaladtogel), V1.4.4, 2011. The underlying algorithm and math are MGC's work; any bugs introduced by this port are ours.
+- Heightmap cache by DerVVulfman.
+- Original release thread + texture help-file: <https://www.save-point.org/thread-3151.html> ([archived snapshot](https://web.archive.org/web/20260424175813/https://www.save-point.org/thread-3151.html)).
