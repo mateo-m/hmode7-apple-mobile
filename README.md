@@ -52,6 +52,6 @@ Following the original plugin's distribution terms from save-point.org, this por
 
 ## Credits
 
-- **H-Mode7 Engine** by [MGC](https://www.save-point.org/thread-3151.html) (MGCaladtogel), V1.4.4, 2011. The underlying algorithm and math are MGC's work; bugs introduced by the port belong to the port maintainers, not MGC.
+- **H-Mode7 Engine** by [MGC](https://www.save-point.org/thread-3151.html) (MGCaladtogel), V1.4.4, 2011. The underlying algorithm and math are MGC's work.
 - Heightmap cache by DerVVulfman.
 - Original release thread + texture help-file: <https://www.save-point.org/thread-3151.html> ([archived snapshot](https://web.archive.org/web/20260424175813/https://www.save-point.org/thread-3151.html)).
