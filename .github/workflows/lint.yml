@@ -8,26 +8,31 @@ on:
 jobs:
   cpp:
     name: C++ (clang-format)
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-format
 
       - name: clang-format check
         run: |
           FILES=$(git ls-files 'src/*.cpp' 'src/*.h')
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs xcrun clang-format --dry-run --Werror
+            echo "$FILES" | xargs clang-format --dry-run --Werror
           fi
 
   markdown:
     name: Markdown (markdownlint)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install markdownlint-cli
         run: npm install -g markdownlint-cli@0.48
