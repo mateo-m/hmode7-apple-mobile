@@ -32,9 +32,8 @@ Complete. Output verified against the public V1.4.4 source for all nine exports 
 
 ## Documents
 
-- [`docs/HMODE7_PORT_DESIGN.md`](docs/HMODE7_PORT_DESIGN.md): per-function algorithm notes, data shapes, porting complexity, wall rasterization math.
 - [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md): the two wall-layer-selection algorithms, auto-detection, override knobs.
-- [`reference/MGC_Hmode7_1_4_4.cpp`](reference/MGC_Hmode7_1_4_4.cpp): MGC's V1.4.4 source, included verbatim for diffing.
+- [`reference/MGC_Hmode7_1_4_4.cpp`](reference/MGC_Hmode7_1_4_4.cpp): MGC's V1.4.4 source, included verbatim for diffing against the port.
 
 ## Integration
 

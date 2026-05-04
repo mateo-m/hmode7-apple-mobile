@@ -19,8 +19,6 @@
 //   data[2]  (red)                     pixel.r
 //   data[3]  (alpha)                   pixel.a
 //   firstRow - y*pitch                 hm7_row_ptr(bmp, y)
-//
-// See HMODE7_PORT_DESIGN.md §3 and §5.6 for context.
 
 #ifndef HM7_PIXELS_H
 #define HM7_PIXELS_H

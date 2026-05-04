@@ -15,7 +15,7 @@
 //   xr = xc + ((xs - xc) * cosTheta - (ys - yc) * sinTheta) / 4096
 //
 // All math is integer fixed-point; exponents are Q12 zoom / Q17
-// slope / Q11 trig (see HMODE7_PORT_DESIGN.md §6).
+// slope / Q11 trig.
 //
 // The output is a 3D int16 Table laid out as two planes:
 //   data_table[yt*xsize + xt]          = xr  (plane 0)
