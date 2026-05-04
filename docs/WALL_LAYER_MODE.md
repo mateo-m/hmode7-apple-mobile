@@ -13,12 +13,12 @@ The MGC H-Mode7 engine went through two DLL rewrites relevant to
 this algorithm choice:
 
 - **V1.3** *("wall events: the class HM7::Surface has some major
-  changes, and the DLL part is entirely rewritten")* — this rewrite
+  changes, and the DLL part is entirely rewritten")*: this rewrite
   targeted **wall events** (sprite-like walls attached to map
   events), which is a completely separate system from tile-layer
   wall extrusion. Does NOT change the tile-layer wall algorithm.
 - **V1.4** *("can now handle n layers (but the more layers, the
-  more lag)")* — this is the rewrite that generalized the
+  more lag)")*: this is the rewrite that generalized the
   layer-handling code from hardcoded 3 layers to configurable n.
   The bottom-cumulative threshold seen in the public V1.4.4 source
   most likely originates here.
@@ -28,13 +28,13 @@ V1.3. The port's autodetection reflects that.
 
 Empirical evidence:
 
-- **Pokemon Insurgence 1.2.7** (`MGC_Hmode7.dll`, MD5
-  `d8e5b905ea25664a104058699db4344e`, 8 exports, 2011-05-15) —
-  a pre-V1.3 DLL. Top-cumulative makes its buildings render
-  correctly; bottom-cumulative shows them as uniform teal blocks
-  with no facade.
+- **Pre-V1.3 DLL** (`MGC_Hmode7.dll`, MD5
+  `d8e5b905ea25664a104058699db4344e`, 8 exports, 2011-05-15) shipped
+  by an RGSS1 fan game widely used as the port reference. Top-
+  cumulative makes its buildings render correctly; bottom-cumulative
+  shows them as uniform teal blocks with no facade.
 - **MGC's public V1.4.4 source** (`MGC_Hmode7_1_4_4.cpp`, 9
-  exports) — uses bottom-cumulative in `renderHM7`.
+  exports) uses bottom-cumulative in `renderHM7`.
 
 Both loops iterate `itLayer` from top to bottom with a `break`-on-
 match, but the threshold they check against differs:
@@ -52,10 +52,10 @@ match, but the threshold they check against differs:
   wall pixel, so the loop always picks the topmost layer at
   iteration 0 and exits. Only the top layer's colormap is ever
   consulted. For tiles where the roof's colormap is transparent
-  over the wall area (which Insurgence's tiles usually are), walls
-  fall through to the flat tile-color path and render as uniform
-  columns — "inelegant vertical walls" in MGC's own words, as if
-  no texture file existed.
+  over the wall area (typical of pre-V1.3-era games), walls fall
+  through to the flat tile-color path and render as uniform columns,
+  "inelegant vertical walls" in MGC's own words, as if no texture
+  file existed.
 
 Whether the v1.4.4 behaviour is intentional or a regression is
 unknown. It's faithfully reproduced by the public source, but the
@@ -65,9 +65,9 @@ game shipping the V1.4+ DLL depends on whatever the V1.4+ DLL does.
 
 ## Configuration
 
-The port defaults to **top-cumulative** (pre-V1.3 behaviour) because
-that is what Pokemon Insurgence — the primary driver of this port —
-depends on.
+The port defaults to **top-cumulative** (pre-V1.3 behaviour). The
+RGSS1 fan game that drove the port's testing ships a pre-V1.3 DLL,
+and top-cumulative is the algorithm its tilesets expect.
 
 Games that actually run a v1.4+ DLL on Windows can opt into the
 reference behaviour by assigning any of these symbols to

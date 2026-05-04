@@ -1,4 +1,4 @@
-# MGC H-Mode7 Plugin — iOS / mkxp-z Port Design Document
+# MGC H-Mode7 Plugin: iOS / mkxp-z Port Design Document
 
 **Source:** `MGC_Hmode7_1_4_4.cpp` (1897 lines, Win32 DLL, RGSS1 ABI)
 **Target:** `mkxp-z-apple-mobile` engine, modern MRI C API (Ruby 1.8 / 1.9 / 3.0 / 3.1, compiled per-version), Apple iOS
@@ -8,12 +8,12 @@
 
 ## 0. Executive Summary
 
-MGC H-Mode7 is a CPU software renderer written for RPG Maker XP (RGSS1) that projects a 2D tile map into a pseudo-3D Mode-7-style view with per-tile height, animated autotiles, vertical wall textures, dynamic lighting, shadows, and object "surfaces" (billboard sprites) with opacity / blend modes. It is a **per-pixel, per-scanline software rasterizer** — no GPU, no shaders — that reads/writes directly into RGSS `Bitmap` and `Table` memory.
+MGC H-Mode7 is a CPU software renderer written for RPG Maker XP (RGSS1) that projects a 2D tile map into a pseudo-3D Mode-7-style view with per-tile height, animated autotiles, vertical wall textures, dynamic lighting, shadows, and object "surfaces" (billboard sprites) with opacity / blend modes. It is a **per-pixel, per-scanline software rasterizer**: no GPU, no shaders: that reads/writes directly into RGSS `Bitmap` and `Table` memory.
 
 The entire DLL is self-contained and uses essentially **no Windows APIs**. The only Win32-specific content is:
-- `<windows.h>` typedefs (`DWORD`, `LPBYTE`, `RGBQUAD`, `BITMAPINFOHEADER`) — all trivially replaceable with `uint32_t` / `uint8_t*` / equivalent.
-- `__declspec(dllexport)` / `__declspec(dllimport)` — remove.
-- `Win32API.new` binding on the Ruby side — replace with direct Ruby C extension method bindings (`rb_define_module_function`).
+- `<windows.h>` typedefs (`DWORD`, `LPBYTE`, `RGBQUAD`, `BITMAPINFOHEADER`): all trivially replaceable with `uint32_t` / `uint8_t*` / equivalent.
+- `__declspec(dllexport)` / `__declspec(dllimport)`: remove.
+- `Win32API.new` binding on the Ruby side: replace with direct Ruby C extension method bindings (`rb_define_module_function`).
 
 There is **no GDI**, **no DirectX**, **no threading**, **no IO**, **no CRT beyond malloc/free**. Math uses only integer arithmetic (no `<math.h>` despite being included). The code is almost trivially portable once the **RGSS1 ABI handling** is replaced with modern MRI equivalents and the **Bitmap pixel layout** is adapted to mkxp's SDL/GL-backed `Bitmap`. The same source compiles against Ruby 1.8 through 3.1 in mkxp-z-apple-mobile's per-version build (one ABI quirk needs handling: Ruby 1.9's strict C++ callback signature on `rb_hash_foreach`, addressed via an `(int (*)(ANYARGS))` cast).
 
@@ -28,16 +28,16 @@ There is **no GDI**, **no DirectX**, **no threading**, **no IO**, **no CRT beyon
 
 ## 1. Algorithm Summary (Per Exported Function)
 
-Below, "BGRA" means a 4-byte per pixel layout `{B, G, R, A}` in memory order (DIB native on Windows, identical to `SDL_PIXELFORMAT_ARGB8888` on little-endian or `SDL_PIXELFORMAT_BGRA32` depending on SDL version — see §3).
+Below, "BGRA" means a 4-byte per pixel layout `{B, G, R, A}` in memory order (DIB native on Windows, identical to `SDL_PIXELFORMAT_ARGB8888` on little-endian or `SDL_PIXELFORMAT_BGRA32` depending on SDL version: see §3).
 
-### 1.1 `computeM7(dataTable, lightline, params)` — ~119 LOC
-**What:** Precomputes, for each screen row × column inside the clipped draw region, the **source-map (x,y) coordinates** corresponding to the projected mode-7 ray. Also precomputes per-row **lighting attenuation** and a per-row **scale factor** used to convert map Y-heights to on-screen vertical extents. This is a "tile-projection LUT" builder — it does not draw anything.
+### 1.1 `computeM7(dataTable, lightline, params)`: ~119 LOC
+**What:** Precomputes, for each screen row × column inside the clipped draw region, the **source-map (x,y) coordinates** corresponding to the projected mode-7 ray. Also precomputes per-row **lighting attenuation** and a per-row **scale factor** used to convert map Y-heights to on-screen vertical extents. This is a "tile-projection LUT" builder: it does not draw anything.
 
 - Read rotation (`cosTheta`,`sinTheta`), slant (`cosAngle`,`sinAngle`), pivot, slope, correction, projection distance, zoom from `params` (Ruby `Array` of 16 Fixnums).
 - For each screen row `yt` in `[max(heightLimit, yMin), yMax)`:
   - Project screen Y → world Y (`yp`): `yp = pivot + (altitude * (yt-pivot)) / ((altitude-distProj)*cosAngle + (yt-pivot)*sinAngle >> 12) * zoom >> 12`.
   - Compute horizon lighting attenuation `ypl = pivot - yp`. When above horizon, write attenuated B/G/R plus untouched "flag" (add/sub) into `lightline[row=0, x=yt]`.
-  - On first iteration of the column loop, compute a "relief coefficient" and a "horizontal zoom" value and stash them into row `-1` of the lightline bitmap (rows above `firstRow` are valid because lightline bitmap is allocated taller — used as a scratch area).
+  - On first iteration of the column loop, compute a "relief coefficient" and a "horizontal zoom" value and stash them into row `-1` of the lightline bitmap (rows above `firstRow` are valid because lightline bitmap is allocated taller: used as a scratch area).
   - For each column `xt` from `xMin` up to `a = screenWidth/2`:
     - Compute `xp` (projected X scale) via `zoom * ((a - xt) << 18) / val_1 >> 12`.
     - Apply 2D rotation (cos/sin theta) around the pivot `(a, pivot)`.
@@ -47,9 +47,9 @@ Below, "BGRA" means a 4-byte per pixel layout `{B, G, R, A}` in memory order (DI
 **Inputs:**
 - `dataReference` (Table): `xsize × ysize × 2` `int16_t`. Plane 0 = precomputed source X; plane 1 = precomputed source Y.
 - `lightlineReference` (Bitmap): one row is used as an index-by-screen-Y cache (row 0 = RGBA lighting attenuation for that row; row `-1` = scratch with per-column relief/zoom).
-- `paramsId` (Array of 16 Fixnums — see §2.1).
+- `paramsId` (Array of 16 Fixnums: see §2.1).
 
-### 1.2 `drawHeightmap(heightmap, heightpattern, mapTileset, tilemapData, nbLayers)` — ~83 LOC
+### 1.2 `drawHeightmap(heightmap, heightpattern, mapTileset, tilemapData, nbLayers)`: ~83 LOC
 **What:** Builds the **giant per-pixel heightmap** for the entire map (size `(mapW*32)*2 × (mapH*32 + mapH*16)`, an `int16_t` Table). Plane 0 rows carry the summed ground height per pixel; additional rows carry "bush" (obstacle) heights. Uses bilinear sampling of a small "height pattern" texture to derive per-pixel wobble, then adds per-tile layer heights from the precomputed map tileset.
 
 - For each pixel `(xt, yt)` in the map (going bottom-to-top because bitmaps are bottom-up):
@@ -58,23 +58,23 @@ Below, "BGRA" means a 4-byte per pixel layout `{B, G, R, A}` in memory order (DI
   - Fetch corresponding row/col in `mapTileset` (where `draw_map_tileset` earlier packed per-layer heights into bytes `[4..4+nbLayers]` and the "bush layer index" at `[4+nbLayers]`).
   - Sum heights for the "occluder" (non-bush) layers into `oGround`, and for all layers into `tGround`.
   - Write:
-    - `heightmap[xt, yt, 0] = hGround + tGround` — full solid height for rendering.
-    - `heightmap[xt, yt, 1]` (i.e. `heightmapDataBush[xt]`) `= hGround + oGround` — bush/standable height.
+    - `heightmap[xt, yt, 0] = hGround + tGround`: full solid height for rendering.
+    - `heightmap[xt, yt, 1]` (i.e. `heightmapDataBush[xt]`) `= hGround + oGround`: bush/standable height.
 
 The bilinear sampling of the small `heightpattern` (typically 32×32) lets you express global terrain (hills) cheaply.
 
-### 1.3 `drawTextureset(textureHash, colormap, textureAuto)` — ~102 LOC
-**What:** For each distinct (non-autotile) tile registered in `textureHash` that has an associated texture bitmap, **splats** that texture into four rotated "strips" in `colormap` — one for each cardinal direction a vertical wall might face — plus a single-byte "dominant direction" channel derived from the original tile colors (red/green/blue/black).
+### 1.3 `drawTextureset(textureHash, colormap, textureAuto)`: ~102 LOC
+**What:** For each distinct (non-autotile) tile registered in `textureHash` that has an associated texture bitmap, **splats** that texture into four rotated "strips" in `colormap`: one for each cardinal direction a vertical wall might face: plus a single-byte "dominant direction" channel derived from the original tile colors (red/green/blue/black).
 
 - Walks the Ruby Hash (`tileNum → [tileValueFixnum, textureBitmap, animNbr, animIndex]`).
 - For each 32×32 source block, emits:
   - Byte 0 of column 0 = direction code (32/64/96/128 for red/green/blue/black).
-  - Columns 1..4 at offsets `k*128` pixels = the texture data, with some mirrored (`31-j`) — one pair is "left" oriented, another "right", for walls on each side.
+  - Columns 1..4 at offsets `k*128` pixels = the texture data, with some mirrored (`31-j`): one pair is "left" oriented, another "right", for walls on each side.
 - Autotile branch: same logic but using the `textureAuto` bitmap (shared autotile texture).
 
 `colormap` ends up as a very wide bitmap (`width = 5*32 = 160`, height proportional to tile count) that subsequent `renderHM7` walls sample vertically via `colormapData = colormapBegin - ((tileIndex*10) << 6) + …`.
 
-### 1.4 `drawHeightmap` pre-requisite: `drawMapTileset(mapTileset, tileset, heightset, tilemapHash, autoTilesets, nbLayers)` — ~105 LOC
+### 1.4 `drawHeightmap` pre-requisite: `drawMapTileset(mapTileset, tileset, heightset, tilemapHash, autoTilesets, nbLayers)`: ~105 LOC
 **What:** Builds the per-map **compacted 3-layer (or N-layer) tileset bitmap**. For every unique `(layer1,layer2,layer3,bush)` combination used anywhere on the map (precollected on Ruby side into `tilemap_hash`), it produces a 32×32 cell in `mapTileset` that contains:
 - Bytes 0..2: BGR of the topmost opaque layer pixel (composited top-down).
 - Byte 3: 255 if any layer has an opaque pixel there, else 0.
@@ -85,21 +85,21 @@ Tile values `< 384` are autotiles (48-per-autotile blocks); `>= 384` are tileset
 
 The "nbBlocks = (nbLayers + 8) >> 2" factor accounts for how many horizontal 32×32 blocks are needed to pack per-cell metadata: it reserves 4 extra BGRA bytes for layer heights + bush.
 
-### 1.5 `refreshMapTileset(mapTileset, tileset, tilemapHash, autoTilesets, nbLayers)` — ~90 LOC
-**What:** Same as `drawMapTileset` but **only refreshes the BGRA color bytes** (not heights, not bush) — used when animated autotiles advance a frame. Does not reset alpha to 255, preserving prior compositing decisions from the full `drawMapTileset` pass.
+### 1.5 `refreshMapTileset(mapTileset, tileset, tilemapHash, autoTilesets, nbLayers)`: ~90 LOC
+**What:** Same as `drawMapTileset` but **only refreshes the BGRA color bytes** (not heights, not bush): used when animated autotiles advance a frame. Does not reset alpha to 255, preserving prior compositing decisions from the full `drawMapTileset` pass.
 
-### 1.6 `applyLighting(heightmap)` — ~100 LOC
+### 1.6 `applyLighting(heightmap)`: ~100 LOC
 **What:** Walks the heightmap **horizontally** (row-by-row, left-to-right) and applies a simulated fixed-direction (east-to-west-ish) **lighting / shadow pass**, writing a signed int8 "shadow delta" into `heightmap[x, y, 1]` (plane 1, alternating entries in flat `SWORD` memory) for each column whose current height rises or falls relative to the running reference height `dyRef`.
 
 - Uses a hard-coded exponential-ish falloff curve `valuesAsc[51]` (precomputed falloffs for distance `dist = 0..50`).
 - On an ascending edge (`dy > dyRef`): illuminates the tail of length `dist`.
 - On a descending edge of height 1: marks "light descent mode" (`lumDesc = 1`) and keeps walking.
 - On a descending edge > 1: casts `shadow = dyRef` so subsequent pixels with `dy < shadow` get `-50` (deep shadow); otherwise applies negative `valuesAsc` to previously-lit tail.
-- Only processes rows `0..(ysize*2/3)` — the **ground** region (the last third is the bush region with different semantics).
+- Only processes rows `0..(ysize*2/3)`: the **ground** region (the last third is the bush region with different semantics).
 
 This produces soft highlights on east-facing slopes and dark shadows in valleys / west-facing cliffs without per-pixel raytracing.
 
-### 1.7 `renderHM7(params, vars, surfaces, nbLayers)` — **~1010 LOC, the main render loop**
+### 1.7 `renderHM7(params, vars, surfaces, nbLayers)`: **~1010 LOC, the main render loop**
 **What:** The rasterizer. For each screen row top-to-bottom (actually **bottom-to-top** because heights grow upwards), for each screen column (with 1×/2× horizontal filter step), it:
 1. Looks up precomputed map (xs, ys) from the `dataTable` built by `computeM7`.
 2. Reads map tile at (xs/32, ys/32), reads ground/bush heights from `heightmap`.
@@ -107,7 +107,7 @@ This produces soft highlights on east-facing slopes and dark shadows in valleys 
 4. For each screen row-column, draws a **vertical "wall" strip** from the ground up `dy` pixels, sampling BGR from `colormap` (the wall texture strip, indexed by tile + direction code) on the sides and from `mapTileset` (the top) on the top.
 5. Applies per-row lighting (`lux_b/g/r/d`), per-column shadow (`oShadow`), and optional per-pixel blend against the surface scratch buffer (4 blend modes: opaque, normal-alpha, add, subtract).
 6. Writes final BGRA to `screenBitmap`.
-7. Tracks the highest `ody` so far per column — the final `oCamera` return value is used on the Ruby side for auto-camera vertical-offset adjustment (camera mode 1/2).
+7. Tracks the highest `ody` so far per column: the final `oCamera` return value is used on the Ruby side for auto-camera vertical-offset adjustment (camera mode 1/2).
 
 Steps in one "tick" (one call):
 - **Setup (lines 811–924):** Parse params, allocate `initA/lA/hA/dA` per-layer scratch arrays with `malloc`, initialize screen/lightline/colormap/mapTileset row pointers, compute horizontal stride, decide `step=1` (no filter) / `step=2 x0=0` (even filter) / `step=2 x0=1` (odd filter alternating frames).
@@ -123,24 +123,24 @@ Steps in one "tick" (one call):
 - **Final pass (lines 1723–1761):** fill any remaining "above-the-topmost-height" pixels with either surface pixel or transparent (`screenData[3] = 0`).
 - `free(initA/lA/hA/dA)`; return `oCamera`.
 
-### 1.8 `applyOpacity(bitmap, opacity)` — ~23 LOC
+### 1.8 `applyOpacity(bitmap, opacity)`: ~23 LOC
 **What:** In-place multiply of alpha channel by `(opacity+1) / 256`. Straight two-nested-loop pixel walk. `alpha' = alpha * (opacity+1) >> 8`. Used to pre-apply event transparency into per-surface bitmaps on Ruby side.
 
-### 1.9 `applyZoom(bmpId, srcId, lissage)` — ~95 LOC
-**What:** Resamples `src` bitmap into `bmp` bitmap at arbitrary scale, using a **fixed-point bilinear** filter when `lissage != 0`, else nearest neighbor. Fixed-point precision is 3 bits (`<< 3` / `>> 3`), so blend weights are 1..8 and the final divisor is `>> 6` (8×8). Alpha-aware: only samples source pixels whose alpha != 0 are weighted in; skipped pixels get weight 0. Note: **this function isn't bound on the Ruby side** in the scripts we've seen — it exists in the DLL but appears to be internal/unused (or used only by later plugin versions). We should port it for completeness but it's low priority.
+### 1.9 `applyZoom(bmpId, srcId, lissage)`: ~95 LOC
+**What:** Resamples `src` bitmap into `bmp` bitmap at arbitrary scale, using a **fixed-point bilinear** filter when `lissage != 0`, else nearest neighbor. Fixed-point precision is 3 bits (`<< 3` / `>> 3`), so blend weights are 1..8 and the final divisor is `>> 6` (8×8). Alpha-aware: only samples source pixels whose alpha != 0 are weighted in; skipped pixels get weight 0. Note: **this function isn't bound on the Ruby side** in the scripts we've seen: it exists in the DLL but appears to be internal/unused (or used only by later plugin versions). We should port it for completeness but it's low priority.
 
 ---
 
 ## 2. Data Structures Consumed
 
-### 2.1 `computeM7`: `params` — Array of 16 Fixnums
+### 2.1 `computeM7`: `params`: Array of 16 Fixnums
 All values are **Ruby Fixnums** (so `value = *(ptr+i) >> 1` in RGSS1 to strip the tag). Units are either integer pixels or Q12 fixed-point (see §6).
 
 | Idx | Name          | Semantics                                                                  | Format                |
 |-----|---------------|----------------------------------------------------------------------------|-----------------------|
 | 0   | cosAngle      | `cos(slant)` × 2048                                                        | signed int            |
 | 1   | sinAngle      | `sin(slant)` × 2048                                                        | signed int            |
-| 2   | altitude      | `distance_h` (camera distance) — NOTE: takes `>> 1` on tag strip twice → actually `distance_h`, not fixed-point | tagged int |
+| 2   | altitude      | `distance_h` (camera distance): NOTE: takes `>> 1` on tag strip twice → actually `distance_h`, not fixed-point | tagged int |
 | 3   | pivot         | screen Y of the horizon line (pivot row)                                   | tagged int            |
 | 4   | slope         | `slope_value_map` = `(1-z0)/(pivot-h0) * 131072`                           | Q17 (131072=2^17)     |
 | 5   | correction    | `corrective_value_map` = `(1-pivot*slope)*131072 / coeff_resolution`       | Q17                   |
@@ -155,9 +155,9 @@ All values are **Ruby Fixnums** (so `value = *(ptr+i) >> 1` in RGSS1 to strip th
 | 14  | yMax          | clip bottom (exclusive)                                                    | tagged int            |
 | 15  | lessCut       | flag (V.1.2.1 `hm7_less_cut`): extends yMax for off-screen bottom elements | tagged bool           |
 
-Note: indices 0, 1, 4, 5, 7, 8 are **not** tagged (they're already scaled into integer space on the Ruby side and passed without `<<1`-tagging — the C code reads them with raw `*ptr` without `>>1`). This is a subtle ABI detail: some entries are Ruby Fixnums (needing `>>1`), some are raw DWORDs masquerading as VALUEs — the Ruby side actually packs them all as Fixnums (positive values, so high bit 0, and the tag bit is bit 0), but the C side is sloppy about which ones to untag. **For our port, pass them as regular `int` arguments or an `RArray` of `FIX2INT`-extracted values without any `<<1`/`>>1` voodoo.**
+Note: indices 0, 1, 4, 5, 7, 8 are **not** tagged (they're already scaled into integer space on the Ruby side and passed without `<<1`-tagging: the C code reads them with raw `*ptr` without `>>1`). This is a subtle ABI detail: some entries are Ruby Fixnums (needing `>>1`), some are raw DWORDs masquerading as VALUEs: the Ruby side actually packs them all as Fixnums (positive values, so high bit 0, and the tag bit is bit 0), but the C side is sloppy about which ones to untag. **For our port, pass them as regular `int` arguments or an `RArray` of `FIX2INT`-extracted values without any `<<1`/`>>1` voodoo.**
 
-### 2.2 `renderHM7`: `params` — Array of 17 elements (mixed types)
+### 2.2 `renderHM7`: `params`: Array of 17 elements (mixed types)
 
 | Idx | Name             | Ruby Type        | Semantics                                                  |
 |-----|------------------|------------------|------------------------------------------------------------|
@@ -166,7 +166,7 @@ Note: indices 0, 1, 4, 5, 7, 8 are **not** tagged (they're already scaled into i
 | 2   | lightline        | Bitmap           | Scratch: row 0 = lighting per row; row -1/-2 = per-column scratch |
 | 3   | heightmap        | Table            | Per-pixel height (built by `drawHeightmap` + `applyLighting`) |
 | 4   | mapTileset       | Bitmap           | Compact tileset (built by `drawMapTileset`)                |
-| 5   | tilemapTable     | Table            | `(w>>3, h, 1)` — each cell packs `[count, layer1, layer2, layer3]` in consecutive x positions (see Ruby init, 210-HM7_NEW_CLASSES.rb:948) |
+| 5   | tilemapTable     | Table            | `(w>>3, h, 1)`: each cell packs `[count, layer1, layer2, layer3]` in consecutive x positions (see Ruby init, 210-HM7_NEW_CLASSES.rb:948) |
 | 6   | colormap         | Bitmap           | Wall texture strips (built by `drawTextureset`)            |
 | 7   | loopX            | Boolean (Fixnum) | Horizontal map looping                                     |
 | 8   | loopY            | Boolean          | Vertical map looping                                       |
@@ -181,7 +181,7 @@ Note: indices 0, 1, 4, 5, 7, 8 are **not** tagged (they're already scaled into i
 
 The Ruby code (210-HM7_NEW_CLASSES.rb:512–516) builds this array once and reuses it every frame.
 
-### 2.3 `renderHM7`: `vars` — Array of 5 Fixnums (per-frame state)
+### 2.3 `renderHM7`: `vars`: Array of 5 Fixnums (per-frame state)
 
 | Idx | Name            | Semantics                                         |
 |-----|-----------------|---------------------------------------------------|
@@ -191,9 +191,9 @@ The Ruby code (210-HM7_NEW_CLASSES.rb:512–516) builds this array once and reus
 | 3   | filter          | 0=no filter / 1=even columns / 2=odd columns      |
 | 4   | oScrY           | Camera Y offset (auto-updated from `renderHM7` return value) |
 
-### 2.4 `renderHM7`: `surfaces` — Array of Arrays; each surface = Array of 11 elements
+### 2.4 `renderHM7`: `surfaces`: Array of Arrays; each surface = Array of 11 elements
 
-Built by sorting on the Ruby side (`210-HM7_NEW_CLASSES.rb:781`: `sort {|a,b| b[2]-a[2]==0 ? a[1]-b[1] : b[2]-a[2]}` — descending Y, ascending X).
+Built by sorting on the Ruby side (`210-HM7_NEW_CLASSES.rb:781`: `sort {|a,b| b[2]-a[2]==0 ? a[1]-b[1] : b[2]-a[2]}`: descending Y, ascending X).
 
 A single surface record from `HM7::Surface#get_data` + extras appended at call time:
 
@@ -211,7 +211,7 @@ A single surface record from `HM7::Surface#get_data` + extras appended at call t
 | 9   | sDispWidth   | Fixnum                      | Horizontal crop/source width              |
 | 10  | sDispOffset  | Fixnum                      | Horizontal crop/source offset             |
 
-The Ruby side `get_data` (210-HM7_NEW_CLASSES.rb:338) currently returns a 6-element array — the 11-element layout is what the C code expects post-plugin-upgrade. For the port, we need to canonicalize this.
+The Ruby side `get_data` (210-HM7_NEW_CLASSES.rb:338) currently returns a 6-element array: the 11-element layout is what the C code expects post-plugin-upgrade. For the port, we need to canonicalize this.
 
 ### 2.5 `drawMapTileset`: `tilemapHash`
 `Hash` mapping **tileCombinationID (Fixnum)** → `[layer1, layer2, ..., layerN, bush]` (Array of Fixnums). N = `nbLayers` (default 3).
@@ -259,7 +259,7 @@ Every `-` should be a `+` if we adapt to mkxp-z's top-down `SDL_Surface`. **Or**
 ### 3.5 Special "negative-row" scratch pattern
 Multiple places in `computeM7` and `renderHM7` access `firstRow - rowSize` (one row **above** the top of the bitmap). This is **only valid if the Ruby side allocates the bitmap 2 rows taller than needed**, treating rows -1 and -2 as scratch.
 
-Looking at the Ruby code: `@rowsdata = Bitmap.new(@render.width, 3)` — yes, the bitmap is allocated **3 rows tall** precisely so that rows "0..2" exist but the plugin indexes them as "0, -1, -2" relative to the bottom row (the DIB's "firstRow"). This is a bottom-up-DIB convention. When ported to top-down, row 0 remains the horizon scratch and rows 1 and 2 become the "above" scratch. **Translate carefully.**
+Looking at the Ruby code: `@rowsdata = Bitmap.new(@render.width, 3)`: yes, the bitmap is allocated **3 rows tall** precisely so that rows "0..2" exist but the plugin indexes them as "0, -1, -2" relative to the bottom row (the DIB's "firstRow"). This is a bottom-up-DIB convention. When ported to top-down, row 0 remains the horizon scratch and rows 1 and 2 become the "above" scratch. **Translate carefully.**
 
 ---
 
@@ -280,11 +280,11 @@ Looking at the Ruby code: `@rowsdata = Bitmap.new(@render.width, 3)` — yes, th
 | **Total**          | **~1770**  | **~2700**                    | Excluding tests                        |
 
 `renderHM7` should be decomposed along the structural boundaries already visible:
-- `render_pre_surfaces(...)` — lines 960–1201
-- `render_surface_column(...)` — lines 1358–1592 (shared with pre-surfaces — extract the inner surface loop)
-- `render_wall_column(...)` — lines 1594–1715
-- `render_final_overdraw(...)` — lines 1723–1761
-- `compute_surface_metrics(...)` — the 20-line header that's repeated twice for surface setup
+- `render_pre_surfaces(...)`: lines 960–1201
+- `render_surface_column(...)`: lines 1358–1592 (shared with pre-surfaces: extract the inner surface loop)
+- `render_wall_column(...)`: lines 1594–1715
+- `render_final_overdraw(...)`: lines 1723–1761
+- `compute_surface_metrics(...)`: the 20-line header that's repeated twice for surface setup
 
 ---
 
@@ -296,14 +296,14 @@ Safe division returning 0 on divide-by-zero. Used many times in `computeM7`. **P
 ### 5.2 `#define RS(target, source, shift)` (arithmetic right-shift fix-up)
 Defined but **never used** in the file. Do not port.
 
-### 5.3 `valuesAsc[51]` — static const char[51]
+### 5.3 `valuesAsc[51]`: static const char[51]
 The exponential-ish lighting falloff table in `applyLighting`. Port verbatim.
 
-### 5.4 `Data_Patterns` (Ruby side — 210-HM7_NEW_CLASSES.rb:110–119)
+### 5.4 `Data_Patterns` (Ruby side: 210-HM7_NEW_CLASSES.rb:110–119)
 Autotile 4-corner pattern LUT (48 entries × 4 ints). Only used in Ruby; no C port needed.
 
 ### 5.5 RGSS1 tag-stripping pattern `>>1` / `<<1`
-Every C access reads a raw Fixnum VALUE as `val = tagged >> 1`, and re-derives a pointer from a Fixnum `id` as `p = (RGSSBITMAP*)(id << 1)`. **In the port, these vanish** — we receive Ruby `VALUE`s directly, unwrap `FIX2INT`/`FIX2LONG` for integers, and use `TypedData_Get_Struct` (or mkxp-z's `getPrivateData`) for bitmap/table pointers.
+Every C access reads a raw Fixnum VALUE as `val = tagged >> 1`, and re-derives a pointer from a Fixnum `id` as `p = (RGSSBITMAP*)(id << 1)`. **In the port, these vanish**: we receive Ruby `VALUE`s directly, unwrap `FIX2INT`/`FIX2LONG` for integers, and use `TypedData_Get_Struct` (or mkxp-z's `getPrivateData`) for bitmap/table pointers.
 
 ### 5.6 Row address helper
 Every function reconstructs `firstRow ± y * rowSize + x * 4` inline. **Port as `static inline uint8_t* pixel_at(Bitmap* bmp, int x, int y)`** to centralize the row-direction + pitch handling and make the codebase self-checking.
@@ -342,14 +342,14 @@ Bilinear in a `10×10` sub-pixel grid (note `yc = (yt*patternHeight*10)/mapHeigh
 ### 6.4 Surface rasterization (in `renderHM7`)
 For a surface with top at `(screenX1, screenY1)` and vanishing-line point `(screenX2, screenY2)`:
 - Per-column slope: `sSlope = (sDy << 7) / sDx` (Q7).
-- Per-column perspective correction derived from `sCmin/sCmax/sCsl` — these come from `lightline` row-1 horizontal-zoom coefficients, giving **a proper perspective projection** (not just linear interpolation). The formula:
+- Per-column perspective correction derived from `sCmin/sCmax/sCsl`: these come from `lightline` row-1 horizontal-zoom coefficients, giving **a proper perspective projection** (not just linear interpolation). The formula:
   ```
   dx1 = (sXt - screenX1 << 12) / sC1
   dx2 = (screenX2 - 1 - sXt << 12) / sC2
   sX  = sDispOffset + (sDispWidth * dx1) / (dx1 + dx2) << 2
   ```
   is a classic rational (perspective-correct) horizontal texture mapping.
-- Per-column vertical scale: `sFh = ((sHeight-1) << 10) / (sRealHeight-1)` — a Q10 fractional step through the source bitmap per screen pixel.
+- Per-column vertical scale: `sFh = ((sHeight-1) << 10) / (sRealHeight-1)`: a Q10 fractional step through the source bitmap per screen pixel.
 
 ### 6.5 Lighting math
 Per-row attenuation `ypl = pivot - yp`: the farther (higher on screen) the brighter. Scaled by `/960` against the user's fog color. Shadow pass uses the `valuesAsc[51]` LUT.
@@ -371,23 +371,23 @@ The **Ruby side** (`HM7::Cache`, 210-HM7_NEW_CLASSES.rb:1005–1038) caches per-
 - mkxp-z's Ruby calls also happen on the game thread; but mkxp-z uses SDL which may off-thread bitmap uploads. **Key concern:** between calling `renderHM7` (which writes raw CPU bytes into `screenBitmap`) and the next GL upload, we must ensure the GPU texture is invalidated (call `Bitmap#taintBitmap` or whatever mkxp-z exposes) so that the next draw uses the new pixels.
 
 ### 7.4 Per-call scratch allocations
-`renderHM7` does four `malloc`s of `nbLayers * sizeof(X)` bytes and frees them at the end. With `nbLayers==3` that's 4 tiny allocations per frame — negligible but **trivially improved by moving them to the stack** (`char initA[MAX_LAYERS=8]`) or a single persistent scratch buffer held in the plugin struct.
+`renderHM7` does four `malloc`s of `nbLayers * sizeof(X)` bytes and frees them at the end. With `nbLayers==3` that's 4 tiny allocations per frame: negligible but **trivially improved by moving them to the stack** (`char initA[MAX_LAYERS=8]`) or a single persistent scratch buffer held in the plugin struct.
 
 ---
 
 ## 8. External Dependencies
 
 ### 8.1 Windows APIs used
-- **Types only** from `<windows.h>`: `DWORD`, `LPBYTE`, `RGBQUAD`, `BITMAPINFOHEADER`. **No function calls.** Replace all with `uint32_t`, `uint8_t*`, a trivial `struct { uint8_t b,g,r,a; }`, and nothing (we don't need `BITMAPINFOHEADER` — just width/height/pitch from our own Bitmap wrapper).
+- **Types only** from `<windows.h>`: `DWORD`, `LPBYTE`, `RGBQUAD`, `BITMAPINFOHEADER`. **No function calls.** Replace all with `uint32_t`, `uint8_t*`, a trivial `struct { uint8_t b,g,r,a; }`, and nothing (we don't need `BITMAPINFOHEADER`: just width/height/pitch from our own Bitmap wrapper).
 
 ### 8.2 GDI
 **None.** The plugin never calls any GDI/DirectDraw/Direct3D function. All drawing is manual pixel pokes.
 
 ### 8.3 CRT
-- `<stdio.h>` — included but **not used** (no printf/fopen).
-- `<stdlib.h>` — `malloc`, `free` only (4 calls in `renderHM7`).
-- `<string.h>` — included but **not used** (no memcpy/memset).
-- `<math.h>` — included but **not used** (all trig is precomputed on the Ruby side).
+- `<stdio.h>`: included but **not used** (no printf/fopen).
+- `<stdlib.h>`: `malloc`, `free` only (4 calls in `renderHM7`).
+- `<string.h>`: included but **not used** (no memcpy/memset).
+- `<math.h>`: included but **not used** (all trig is precomputed on the Ruby side).
 
 ### 8.4 Ruby C API (RGSS1)
 - **Direct struct-casting from Fixnum `__id__` values.** No `rb_…` functions called from C. This is the **entire ABI-compatibility surface** that must be reimagined for modern MRI (1.8 / 1.9 / 3.0 / 3.1).
@@ -415,15 +415,15 @@ None. The source is pure C.
 4. **Row-direction audit:** one pass to flip all `firstRow - y*pitch` to `pixels + y*pitch` if we switch to top-down.
 5. **Scratch-row validation:** verify that the Ruby side still allocates `@rowsdata` as a 3-tall bitmap and translate the "row -1 / row -2" scratch into "row 1 / row 2" (top-down convention).
 6. **GL sync:** after each call that writes into a mkxp-z `Bitmap`, call the appropriate "pixel data changed" notification so the GL texture is refreshed on next draw.
-7. **Split `renderHM7`** into the five helper functions outlined in §4 during the port — do not preserve the monolithic layout.
-8. **iOS note:** ARM64-LE matches the BGRA-in-memory assumption byte-wise; no endianness porting is needed. No 32-bit integer assumptions are dangerous — all multiply-shift patterns fit in `int32_t` given practical input sizes (screen ≤ 640×480, map ≤ 200×200).
+7. **Split `renderHM7`** into the five helper functions outlined in §4 during the port: do not preserve the monolithic layout.
+8. **iOS note:** ARM64-LE matches the BGRA-in-memory assumption byte-wise; no endianness porting is needed. No 32-bit integer assumptions are dangerous: all multiply-shift patterns fit in `int32_t` given practical input sizes (screen ≤ 640×480, map ≤ 200×200).
 9. **Test strategy:** render a reference frame on the Windows DLL (capture the final `screenBitmap` as PNG), feed the same inputs through the port, and `pHash`/`pixel-diff` the outputs. The functions are deterministic integer math, so bit-exact agreement is achievable.
 
 ---
 
 ## 10. Quirks, Gotchas & Open Questions
 
-1. **`drawMapTileset`, `drawTextureset`, `refreshMapTileset`, `drawHeightmap` take an `nbLayers` argument in C but the Ruby binding declares `"llll"` / `"lll"` / `"llll"` / `"llll"`** (no `nbLayers` argument passed from Ruby). The C code reads `nbLayers` from the ABI anyway, which on x86 `__stdcall` means it reads **garbage from the stack**. Looking at the Ruby code, `nbLayers` is never passed; yet the C code defaults it to `*(ptr + nbLayers)`. **Hypothesis: later versions of the plugin dropped the explicit `nbLayers` and hardcoded N=3 in the Ruby configuration.** For our port, **hardcode `nbLayers=3`** and verify against the scripts we have (which indeed pass 3-element layer data everywhere). The `renderHM7` and `compute_m7` bindings are `"lll"` (3 longs) — no nbLayers. Take nbLayers as a compile-time constant.
+1. **`drawMapTileset`, `drawTextureset`, `refreshMapTileset`, `drawHeightmap` take an `nbLayers` argument in C but the Ruby binding declares `"llll"` / `"lll"` / `"llll"` / `"llll"`** (no `nbLayers` argument passed from Ruby). The C code reads `nbLayers` from the ABI anyway, which on x86 `__stdcall` means it reads **garbage from the stack**. Looking at the Ruby code, `nbLayers` is never passed; yet the C code defaults it to `*(ptr + nbLayers)`. **Hypothesis: later versions of the plugin dropped the explicit `nbLayers` and hardcoded N=3 in the Ruby configuration.** For our port, **hardcode `nbLayers=3`** and verify against the scripts we have (which indeed pass 3-element layer data everywhere). The `renderHM7` and `compute_m7` bindings are `"lll"` (3 longs): no nbLayers. Take nbLayers as a compile-time constant.
 
 2. **Alpha channel convention in mapTileset byte 3.** `drawMapTileset` sets byte 3 to 255 on any opaque pixel; `refreshMapTileset` preserves whatever was there. In `renderHM7`, byte 3 (`alpha = mapTilesetData[3]`) is read and written into the final screen pixel. So the alpha is a per-tile "something is drawn here" mask, not a transparency gradient. Preserve this.
 
@@ -431,11 +431,11 @@ None. The source is pure C.
 
 4. **`renderHM7` pre-surface pass runs only on the first iteration** (`if (!(yMax - 1 - yt))`, line 960). This is the "flush surfaces below the first drawn row" logic. Easy to miss when refactoring.
 
-5. **`sScreenBitmap` is 2× the screen width.** It's 8 bytes per screen pixel (`sScreenRowSize = screenRowSize << 1`). Layout of those 8 bytes: `[0]=flag (1 if surface pixel present), [1]=blendMode, [2]=hbaseHi, [3]=hbaseLo, [4..6]=BGR, [7]=opacity`. Ruby side allocates it as `Bitmap.new(@render.width, @render.height)` — but the C code treats every row as 8-byte pixels by using `sScreenRowSize = screenRowSize << 1`. **This means the Ruby-side bitmap must actually be 2× width, or `renderHM7` reads past the edge.** Looking at 210-HM7_NEW_CLASSES.rb:515: `Bitmap.new(@render.width, @render.height)` — that's 4 bytes/pixel × width × height bytes total. The C code reads `(xt << 3) + 7` which can go up to `(screenWidth-1)*8 + 7 = 8*screenWidth - 1` bytes from row start — but the bitmap only has `4*screenWidth` bytes per row. **This is a latent buffer overflow in the original unless the Ruby side allocates `Bitmap.new(2*@render.width, @render.height)`.** The Ruby side as provided uses `@render.width` × `@render.height` — we should **double the width for the port**. Verify by instrumenting the Windows DLL; if it works there, it's because the DIB row size has padding that happens to cover the overread on typical widths, or the fault is masked. **Safest to allocate 2× width.**
+5. **`sScreenBitmap` is 2× the screen width.** It's 8 bytes per screen pixel (`sScreenRowSize = screenRowSize << 1`). Layout of those 8 bytes: `[0]=flag (1 if surface pixel present), [1]=blendMode, [2]=hbaseHi, [3]=hbaseLo, [4..6]=BGR, [7]=opacity`. Ruby side allocates it as `Bitmap.new(@render.width, @render.height)`: but the C code treats every row as 8-byte pixels by using `sScreenRowSize = screenRowSize << 1`. **This means the Ruby-side bitmap must actually be 2× width, or `renderHM7` reads past the edge.** Looking at 210-HM7_NEW_CLASSES.rb:515: `Bitmap.new(@render.width, @render.height)`: that's 4 bytes/pixel × width × height bytes total. The C code reads `(xt << 3) + 7` which can go up to `(screenWidth-1)*8 + 7 = 8*screenWidth - 1` bytes from row start: but the bitmap only has `4*screenWidth` bytes per row. **This is a latent buffer overflow in the original unless the Ruby side allocates `Bitmap.new(2*@render.width, @render.height)`.** The Ruby side as provided uses `@render.width` × `@render.height`: we should **double the width for the port**. Verify by instrumenting the Windows DLL; if it works there, it's because the DIB row size has padding that happens to cover the overread on typical widths, or the fault is masked. **Safest to allocate 2× width.**
 
 6. **"lightline" row indexing.** Three conceptual rows:
    - Row 0: per-screen-Y lighting (B,G,R,flag).
-   - Row -1 (one above firstRow in BG-DIB = row 1 in top-down): per-column relief coefficient (`val_5`) and horizontal zoom data — two 16-bit values packed as 4 bytes.
+   - Row -1 (one above firstRow in BG-DIB = row 1 in top-down): per-column relief coefficient (`val_5`) and horizontal zoom data: two 16-bit values packed as 4 bytes.
    - Row -2 (two above firstRow = row 2 in top-down): per-column topmost-drawn-Y (`ym`), packed as two bytes.
    The Ruby side allocates `Bitmap.new(@render.width, 3)` so all three rows exist. **Port must match: top-down row 0 = lighting, row 1 = horizontal zoom, row 2 = per-column ym (or pick a consistent convention).**
 
