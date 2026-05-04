@@ -47,9 +47,7 @@ struct ComputeM7Params {
 // `params`: the 16-field parameter bundle. See Ruby 210-HM7_NEW_CLASSES.rb:512.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 133-251, ~120 LOC.
-int compute_m7(std::int16_t *data_table,
-               int xsize, int ysize,
-               SDL_Surface *lightline,
+int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *lightline,
                const ComputeM7Params &params);
 
 }  // namespace hm7

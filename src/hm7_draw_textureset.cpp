@@ -76,26 +76,27 @@ inline const std::uint8_t *byte_row_const(const SDL_Surface *surf, int y) {
 // (e.g. near the atlas edge, or tiles near 0 that would index
 // negative rows).
 inline std::uint8_t *dst_at(SDL_Surface *surf, int row, int col_px) {
-    if (row < 0 || row >= surf->h) return nullptr;
-    if (col_px < 0 || col_px >= surf->w) return nullptr;
+    if (row < 0 || row >= surf->h)
+        return nullptr;
+    if (col_px < 0 || col_px >= surf->w)
+        return nullptr;
     return byte_row(surf, row) + (col_px << 2);
 }
 
 inline const std::uint8_t *src_at(const SDL_Surface *surf, int row, int col_px) {
-    if (row < 0 || row >= surf->h) return nullptr;
-    if (col_px < 0 || col_px >= surf->w) return nullptr;
+    if (row < 0 || row >= surf->h)
+        return nullptr;
+    if (col_px < 0 || col_px >= surf->w)
+        return nullptr;
     return byte_row_const(surf, row) + (col_px << 2);
 }
 
 }  // namespace
 
-void draw_textureset_entry(SDL_Surface *colormap,
-                           int tile_num,
-                           int tile_value,
-                           SDL_Surface *texture,
-                           SDL_Surface *texture_auto,
-                           int anim_nbr, int anim_index) {
-    if (!colormap) return;
+void draw_textureset_entry(SDL_Surface *colormap, int tile_num, int tile_value, SDL_Surface *texture,
+                           SDL_Surface *texture_auto, int anim_nbr, int anim_index) {
+    if (!colormap)
+        return;
     // `yt` is the top-down destination row base for this tile's
     // 32-row atlas band. Tiles are stacked row-by-row, no multiplier.
     const int yt = tile_num << 5;
@@ -105,14 +106,17 @@ void draw_textureset_entry(SDL_Surface *colormap,
     // from display row 0). Our port treats missing/zero as "single
     // frame" which the Ruby side also passes as `1`. Clamp to at
     // least 1 so we don't divide into row 0 forever.
-    if (anim_nbr <= 0) anim_nbr = 1;
-    if (anim_index < 0) anim_index = 0;
+    if (anim_nbr <= 0)
+        anim_nbr = 1;
+    if (anim_index < 0)
+        anim_index = 0;
 
     if (tile_value >= 384) {
         // ------------------------------------------------------
         //  Regular-texture path (tileValue >= 384).
         // ------------------------------------------------------
-        if (!texture) return;
+        if (!texture)
+            return;
 
         for (int i = 31; i >= 0; --i) {
             // Texture source row for sprite row `i` at the current
@@ -121,7 +125,8 @@ void draw_textureset_entry(SDL_Surface *colormap,
 
             for (int j = 31; j >= 0; --j) {
                 const std::uint8_t *tex = src_at(texture, tex_row, j);
-                if (!tex) continue;
+                if (!tex)
+                    continue;
 
                 // Direction-code strip: the atlas byte at
                 // (colormap row = yt+i, col = j) byte 0 carries a
@@ -139,10 +144,14 @@ void draw_textureset_entry(SDL_Surface *colormap,
                 // readers.
                 std::uint8_t *cmap = dst_at(colormap, yt + i, j);
                 if (cmap) {
-                    if      (tex[0]) cmap[0] = 32;   // R dominant
-                    else if (tex[1]) cmap[0] = 64;   // G dominant
-                    else if (tex[2]) cmap[0] = 96;   // B dominant
-                    else             cmap[0] = 128;  // black
+                    if (tex[0])
+                        cmap[0] = 32;  // R dominant
+                    else if (tex[1])
+                        cmap[0] = 64;  // G dominant
+                    else if (tex[2])
+                        cmap[0] = 96;  // B dominant
+                    else
+                        cmap[0] = 128;  // black
                 }
 
                 // Strips 1..4 at `(yt+j)` rows (transposed), cols
@@ -151,13 +160,13 @@ void draw_textureset_entry(SDL_Surface *colormap,
                 // face opposite directions).
                 for (int k = 4; k >= 1; --k) {
                     const int src_j = (k == 1 || k == 4) ? j : (31 - j);
-                    const std::uint8_t *tex_k =
-                        src_at(texture, tex_row, src_j + (k << 5));
-                    if (!tex_k) continue;
+                    const std::uint8_t *tex_k = src_at(texture, tex_row, src_j + (k << 5));
+                    if (!tex_k)
+                        continue;
 
-                    std::uint8_t *cm_k =
-                        dst_at(colormap, yt + j, i + (k << 5));
-                    if (!cm_k) continue;
+                    std::uint8_t *cm_k = dst_at(colormap, yt + j, i + (k << 5));
+                    if (!cm_k)
+                        continue;
 
                     cm_k[0] = tex_k[0];
                     cm_k[1] = tex_k[1];
@@ -179,7 +188,8 @@ void draw_textureset_entry(SDL_Surface *colormap,
         //  at `texture` with frames stacked row-wise, so row
         //  stride uses `<< 9` in the original).
         // ------------------------------------------------------
-        if (!texture_auto) return;
+        if (!texture_auto)
+            return;
 
         const int ox = (tile_value & 7) << 5;
         const int oy = ((tile_value % 48) >> 3) << 5;
@@ -189,14 +199,19 @@ void draw_textureset_entry(SDL_Surface *colormap,
                 // Direction-code source pulls from `texture_auto`
                 // at (aty=oy+i, atx=ox+j).
                 const std::uint8_t *tex_auto = src_at(texture_auto, oy + i, ox + j);
-                if (!tex_auto) continue;
+                if (!tex_auto)
+                    continue;
 
                 std::uint8_t *cmap = dst_at(colormap, yt + i, j);
                 if (cmap) {
-                    if      (tex_auto[0]) cmap[0] = 32;
-                    else if (tex_auto[1]) cmap[0] = 64;
-                    else if (tex_auto[2]) cmap[0] = 96;
-                    else                  cmap[0] = 128;
+                    if (tex_auto[0])
+                        cmap[0] = 32;
+                    else if (tex_auto[1])
+                        cmap[0] = 64;
+                    else if (tex_auto[2])
+                        cmap[0] = 96;
+                    else
+                        cmap[0] = 128;
                 }
 
                 // Strips 1..4 source from `texture` at row
@@ -205,7 +220,8 @@ void draw_textureset_entry(SDL_Surface *colormap,
                 // `<< 9` in the original instead of `<< 7`, but
                 // the logical row index is the same `i*animNbr +
                 // animIndex` regardless of atlas width).
-                if (!texture) continue;
+                if (!texture)
+                    continue;
                 const int tex_row = i * anim_nbr + anim_index;
 
                 for (int k = 4; k >= 1; --k) {
@@ -214,13 +230,13 @@ void draw_textureset_entry(SDL_Surface *colormap,
                     // << 7)` as in the regular-texture path. So the
                     // column offset shifts by `(k-1)*32` pixels,
                     // not `k*32`. Reproduce faithfully.
-                    const std::uint8_t *tex_k =
-                        src_at(texture, tex_row, src_j + ((k - 1) << 5));
-                    if (!tex_k) continue;
+                    const std::uint8_t *tex_k = src_at(texture, tex_row, src_j + ((k - 1) << 5));
+                    if (!tex_k)
+                        continue;
 
-                    std::uint8_t *cm_k =
-                        dst_at(colormap, yt + j, i + (k << 5));
-                    if (!cm_k) continue;
+                    std::uint8_t *cm_k = dst_at(colormap, yt + j, i + (k << 5));
+                    if (!cm_k)
+                        continue;
 
                     cm_k[0] = tex_k[0];
                     cm_k[1] = tex_k[1];

@@ -45,11 +45,10 @@ inline int divise(int a, int b) {
 }
 }  // namespace
 
-int compute_m7(std::int16_t *data_table,
-               int xsize, int ysize,
-               SDL_Surface *lightline,
+int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *lightline,
                const ComputeM7Params &params) {
-    if (!data_table || !lightline) return -1;
+    if (!data_table || !lightline)
+        return -1;
 
     const int a = xsize >> 1;
     const int xc = a;
@@ -80,7 +79,7 @@ int compute_m7(std::int16_t *data_table,
     const int lightPitch = lightline->pitch;
 
     std::uint8_t *lightingRowBytes = lightBytes + 0 * lightPitch;  // row 0
-    std::uint8_t *reliefRowBytes   = lightBytes + 1 * lightPitch;  // row 1
+    std::uint8_t *reliefRowBytes = lightBytes + 1 * lightPitch;    // row 1
 
     // Seed lux values from lightline[row=0, col=0] = fade color. The
     // per-byte semantics: byte 0/1/2 are the color values
@@ -100,13 +99,13 @@ int compute_m7(std::int16_t *data_table,
     }
 
     int y0 = params.heightLimit;
-    if (y0 < params.yMin) y0 = params.yMin;
+    if (y0 < params.yMin)
+        y0 = params.yMin;
 
     for (int yt = y0; yt < yMax; ++yt) {
         const int yt_rel = yt - params.pivot;
         const int denom = val_4 + yt_rel * params.sinAngle >> 12;
-        const int yp = (divise(params.altitude * yt_rel, denom) * params.zoom >> 12)
-                     + params.pivot;
+        const int yp = (divise(params.altitude * yt_rel, denom) * params.zoom >> 12) + params.pivot;
         const int ys = yp;
         const int val_1 = params.slope * yt + params.correction;
         const int val_2 = (ys - yc) * params.cosTheta;
@@ -120,13 +119,16 @@ int compute_m7(std::int16_t *data_table,
         if (ypl >= 0 && yt < lightline->w) {
             std::uint8_t *p = lightingRowBytes + (yt << 2);
             int lux = (lux_0 * ypl) / 960;
-            if (lux > 255) lux = 255;
+            if (lux > 255)
+                lux = 255;
             p[0] = static_cast<std::uint8_t>(lux);
             lux = (lux_1 * ypl) / 960;
-            if (lux > 255) lux = 255;
+            if (lux > 255)
+                lux = 255;
             p[1] = static_cast<std::uint8_t>(lux);
             lux = (lux_2 * ypl) / 960;
-            if (lux > 255) lux = 255;
+            if (lux > 255)
+                lux = 255;
             p[2] = static_cast<std::uint8_t>(lux);
             p[3] = static_cast<std::uint8_t>(lux_3);
         }
@@ -164,7 +166,7 @@ int compute_m7(std::int16_t *data_table,
                 const int xs_rel = xs - xc;
                 const int yr = yc + ((xs_rel * params.sinTheta + val_2) >> 12);
                 const int xr = xc + ((xs_rel * params.cosTheta - val_3) >> 12);
-                data_table[xt + oy]      = static_cast<std::int16_t>(xr);
+                data_table[xt + oy] = static_cast<std::int16_t>(xr);
                 data_table[xt + oy + oz] = static_cast<std::int16_t>(yr);
             }
 
@@ -174,7 +176,7 @@ int compute_m7(std::int16_t *data_table,
                 const int xs_rel = xs - xc;
                 const int yr = yc + ((xs_rel * params.sinTheta + val_2) >> 12);
                 const int xr = xc + ((xs_rel * params.cosTheta - val_3) >> 12);
-                data_table[xsize - 1 - xt + oy]      = static_cast<std::int16_t>(xr);
+                data_table[xsize - 1 - xt + oy] = static_cast<std::int16_t>(xr);
                 data_table[xsize - 1 - xt + oy + oz] = static_cast<std::int16_t>(yr);
             }
         }

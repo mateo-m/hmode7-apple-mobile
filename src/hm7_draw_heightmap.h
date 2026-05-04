@@ -35,13 +35,8 @@ namespace hm7 {
 // `nb_layers`: hardcoded to 3 per design doc §10.1.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 257-339, ~83 LOC.
-int draw_heightmap(std::int16_t *heightmap,
-                   int raw_xsize,
-                   std::int16_t *tilemap_data,
-                   int tilemap_xsize, int tilemap_ysize,
-                   SDL_Surface *map_tileset,
-                   SDL_Surface *pattern,
-                   int nb_layers);
+int draw_heightmap(std::int16_t *heightmap, int raw_xsize, std::int16_t *tilemap_data, int tilemap_xsize,
+                   int tilemap_ysize, SDL_Surface *map_tileset, SDL_Surface *pattern, int nb_layers);
 
 }  // namespace hm7
 
