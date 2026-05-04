@@ -1,0 +1,28 @@
+name: Format
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Format job verifies that the formatters would not modify any
+# tracked file. If they would, the job fails with a clear diff
+# so the contributor knows exactly what to run locally.
+
+jobs:
+  cpp:
+    name: C++ (clang-format)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: clang-format check
+        run: |
+          FILES=$(git ls-files 'src/*.cpp' 'src/*.h')
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs xcrun clang-format -i
+            if ! git diff --exit-code; then
+              echo "::error::clang-format would modify files. Run \`xcrun clang-format -i src/*.cpp src/*.h\` locally and commit."
+              exit 1
+            fi
+          fi

@@ -44,15 +44,12 @@
 
 namespace hm7 {
 
-int draw_heightmap(std::int16_t *heightmap,
-                   int raw_xsize,
-                   std::int16_t *tilemap_data,
-                   int tilemap_xsize, int tilemap_ysize,
-                   SDL_Surface *map_tileset,
-                   SDL_Surface *pattern,
-                   int nb_layers) {
-    if (!heightmap || !tilemap_data || !map_tileset || !pattern) return -1;
-    if (nb_layers <= 0) return -1;
+int draw_heightmap(std::int16_t *heightmap, int raw_xsize, std::int16_t *tilemap_data, int tilemap_xsize,
+                   int tilemap_ysize, SDL_Surface *map_tileset, SDL_Surface *pattern, int nb_layers) {
+    if (!heightmap || !tilemap_data || !map_tileset || !pattern)
+        return -1;
+    if (nb_layers <= 0)
+        return -1;
 
     const int nbBlocks = (nb_layers + 8) >> 2;  // = 2 for nb_layers=3
     const int mapWidthPx = (tilemap_xsize / (nb_layers + 1)) << 5;
@@ -85,8 +82,7 @@ int draw_heightmap(std::int16_t *heightmap,
     // The correct offset is `raw_xsize * mapHeightPx`, which is
     // `2 * mapHeightPx * mapWidthPx` because raw_xsize packs the
     // two interleaved planes.
-    std::int16_t *bush = heightmap
-                         + static_cast<long>(raw_xsize) * mapHeightPx;
+    std::int16_t *bush = heightmap + static_cast<long>(raw_xsize) * mapHeightPx;
 
     for (int yt = 0; yt < mapHeightPx; ++yt) {
         // Ruby builds the pattern by "10 units per pattern pixel"
@@ -114,10 +110,9 @@ int draw_heightmap(std::int16_t *heightmap,
             int hGround;
             if (ys != patternHeight - 1 && xs != patternWidth - 1) {
                 const Pixel *row2 = hm7_row_ptr_const(pattern, ys + 1);
-                hGround = ((10 - xr) * (10 - yr) * row1[xs].r
-                         +  xr       * (10 - yr) * row1[xs + 1].r
-                         + (10 - xr) *  yr       * row2[xs].r
-                         +  xr       *  yr       * row2[xs + 1].r) / 100;
+                hGround = ((10 - xr) * (10 - yr) * row1[xs].r + xr * (10 - yr) * row1[xs + 1].r +
+                           (10 - xr) * yr * row2[xs].r + xr * yr * row2[xs + 1].r) /
+                          100;
             } else if (ys != patternHeight - 1) {
                 const Pixel *row2 = hm7_row_ptr_const(pattern, ys + 1);
                 hGround = ((10 - yr) * row1[xs].r + yr * row2[xs].r) / 10;
@@ -135,8 +130,7 @@ int draw_heightmap(std::int16_t *heightmap,
             // tileset lookup.
             const int cellX = xt >> 5;
             const int cellY = yt >> 5;
-            const int tileIndex = tilemap_data[cellY * tilemap_xsize
-                                              + cellX * (nb_layers + 1)];
+            const int tileIndex = tilemap_data[cellY * tilemap_xsize + cellX * (nb_layers + 1)];
 
             // Tile sub-pixel inside the 32x32 cell.
             const int subX = xt - (cellX << 5);
@@ -176,8 +170,7 @@ int draw_heightmap(std::int16_t *heightmap,
             // Safest: get a raw byte pointer to the pixel row
             // instead of going through the Pixel struct.
             const std::uint8_t *tsRow = reinterpret_cast<std::uint8_t *>(
-                static_cast<std::uint8_t *>(map_tileset->pixels)
-                + yts * map_tileset->pitch);
+                static_cast<std::uint8_t *>(map_tileset->pixels) + yts * map_tileset->pitch);
             const std::uint8_t *tsData = tsRow + (xts << 2);
 
             const int bushStart = tsData[4 + nb_layers];

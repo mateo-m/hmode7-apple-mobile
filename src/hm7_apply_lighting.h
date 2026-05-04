@@ -24,8 +24,7 @@ namespace hm7 {
 // The last third is the "bush/cliff" region handled by renderHM7.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 452-551, ~100 LOC.
-int apply_lighting(std::int16_t *heightmap_data,
-                   int raw_xsize, int raw_ysize);
+int apply_lighting(std::int16_t *heightmap_data, int raw_xsize, int raw_ysize);
 
 }  // namespace hm7
 

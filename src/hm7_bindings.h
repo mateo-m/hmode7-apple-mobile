@@ -62,17 +62,12 @@ int bitmap_height(VALUE value);
 //
 // `out_xsize` / `out_ysize` / `out_zsize` are filled with the
 // table's dimensions. Returns nullptr if `value` isn't a Table.
-std::int16_t *table_data(VALUE value,
-                         int *out_xsize,
-                         int *out_ysize,
-                         int *out_zsize);
+std::int16_t *table_data(VALUE value, int *out_xsize, int *out_ysize, int *out_zsize);
 
 // Convenience: index a Table element with bounds (x,y,z) mapping to
 // `data[z*xsize*ysize + y*xsize + x]`. Inline to avoid overhead in
 // the per-pixel loops of the original plugin.
-inline std::int16_t &table_at(std::int16_t *data,
-                              int xsize, int ysize,
-                              int x, int y, int z) {
+inline std::int16_t &table_at(std::int16_t *data, int xsize, int ysize, int x, int y, int z) {
     return data[z * xsize * ysize + y * xsize + x];
 }
 
@@ -90,11 +85,11 @@ int array_to_ints(VALUE array, int *out, int max_count);
 // drawMapTileset, refreshMapTileset, drawTextureset). Encoding it as
 // a typed iterator avoids repeating the rb_hash_foreach boilerplate.
 struct TileHashEntry {
-    int key;                  // the tile-number Ruby key
-    int tile_value;           // from entry[0]
-    VALUE tile_bitmap;        // from entry[1]: the tile / texture image
-    int anim_nbr;             // from entry[2]
-    int anim_index;           // from entry[3]
+    int key;            // the tile-number Ruby key
+    int tile_value;     // from entry[0]
+    VALUE tile_bitmap;  // from entry[1]: the tile / texture image
+    int anim_nbr;       // from entry[2]
+    int anim_index;     // from entry[3]
 };
 
 typedef void (*TileHashCallback)(const TileHashEntry &entry, void *user_data);

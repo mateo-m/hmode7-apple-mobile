@@ -24,20 +24,18 @@ namespace {
 
 // Precomputed highlight/shadow falloff by distance. Exact values
 // match the original valuesAsc[51] table.
-const signed char valuesAsc[51] = {
-    0, 45, 26, 18, 14, 11, 9, 8, 7, 6, 5, 5, 4, 4, 4, 3, 3, 3, 3, 3,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1
-};
+const signed char valuesAsc[51] = {0, 45, 26, 18, 14, 11, 9, 8, 7, 6, 5, 5, 4, 4, 4, 3, 3,
+                                   3, 3,  3,  2,  2,  2,  2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1,
+                                   1, 1,  1,  1,  1,  1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 }  // namespace
 
-int apply_lighting(std::int16_t *heightmap_data,
-                   int raw_xsize, int raw_ysize) {
-    if (!heightmap_data || raw_xsize <= 0 || raw_ysize <= 0) return -1;
+int apply_lighting(std::int16_t *heightmap_data, int raw_xsize, int raw_ysize) {
+    if (!heightmap_data || raw_xsize <= 0 || raw_ysize <= 0)
+        return -1;
 
-    const int heightmapWidth  = raw_xsize >> 1;             // logical px width
-    const int heightmapHeight = (raw_ysize << 1) / 3;       // ground region only
+    const int heightmapWidth = raw_xsize >> 1;         // logical px width
+    const int heightmapHeight = (raw_ysize << 1) / 3;  // ground region only
 
     // Cursor into the flat Table storage; advances by raw_xsize per
     // row processed. We use a local pointer to mirror the original's
@@ -45,7 +43,8 @@ int apply_lighting(std::int16_t *heightmap_data,
     std::int16_t *row = heightmap_data;
 
     for (int yt = 0; yt < heightmapHeight; ++yt) {
-        if (yt > 0) row += raw_xsize;
+        if (yt > 0)
+            row += raw_xsize;
 
         int dist = 0;
         bool initDy = false;
@@ -85,11 +84,11 @@ int apply_lighting(std::int16_t *heightmap_data,
                     // `dist-1` pixels.
                     if (lumDesc) {
                         int length = dist - 1;
-                        if (length > 50) length = 50;
+                        if (length > 50)
+                            length = 50;
                         int value = -valuesAsc[length];
                         for (int k = 1; k <= length; ++k) {
-                            row[((xt - dist + k) << 1) + 1] =
-                                static_cast<std::int16_t>(value);
+                            row[((xt - dist + k) << 1) + 1] = static_cast<std::int16_t>(value);
                         }
                     }
                 } else {
@@ -97,11 +96,11 @@ int apply_lighting(std::int16_t *heightmap_data,
                     // illuminate the previous `dist` pixels.
                     if (!lumDesc) {
                         int length = dist;
-                        if (length > 51) length = 51;
+                        if (length > 51)
+                            length = 51;
                         int value = valuesAsc[length - 1];
                         for (int k = length - 1; k >= 1; --k) {
-                            row[((xt - k) << 1) + 1] =
-                                static_cast<std::int16_t>(value);
+                            row[((xt - k) << 1) + 1] = static_cast<std::int16_t>(value);
                         }
                     }
                     // lumDesc branch intentionally does nothing here
@@ -113,11 +112,11 @@ int apply_lighting(std::int16_t *heightmap_data,
             } else if (dy < dyRef) {
                 if (lumDesc) {
                     int length = dist - 1;
-                    if (length > 50) length = 50;
+                    if (length > 50)
+                        length = 50;
                     int value = -valuesAsc[length];
                     for (int k = 1; k <= length; ++k) {
-                        row[((xt - dist + k) << 1) + 1] =
-                            static_cast<std::int16_t>(value);
+                        row[((xt - dist + k) << 1) + 1] = static_cast<std::int16_t>(value);
                     }
                     if ((dyRef - dy - 1) != 0) {
                         // Multi-step drop: cast a shadow of length dyRef.

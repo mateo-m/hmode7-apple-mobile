@@ -22,39 +22,47 @@
 #include <ruby.h>
 #include <SDL_surface.h>
 
-#include "bitmap.h"  // mkxp-z Bitmap
-#include "table.h"   // mkxp-z Table (etc.h forward-declares only)
-#include "etc.h"     // mkxp-z IntRect
+#include "bitmap.h"        // mkxp-z Bitmap
+#include "table.h"         // mkxp-z Table (etc.h forward-declares only)
+#include "etc.h"           // mkxp-z IntRect
 #include "binding-util.h"  // getPrivateData<>()
 
 namespace hm7 {
 
 SDL_Surface *bitmap_lock(VALUE value) {
-    if (NIL_P(value)) return nullptr;
+    if (NIL_P(value))
+        return nullptr;
     Bitmap *b = getPrivateDataNoRaise<Bitmap>(value);
-    if (!b) return nullptr;
-    if (b->isDisposed()) return nullptr;
+    if (!b)
+        return nullptr;
+    if (b->isDisposed())
+        return nullptr;
     // mkxp-z lazily allocates the shadow SDL_Surface on first CPU
     // access (e.g. getPixel). We trigger that allocation by reading
     // one pixel; subsequent calls return the cached surface.
     b->getPixel(0, 0);
     SDL_Surface *surf = b->surface();
-    if (!surf) return nullptr;
+    if (!surf)
+        return nullptr;
     return surf;
 }
 
 void bitmap_commit(VALUE value) {
-    if (NIL_P(value)) return;
+    if (NIL_P(value))
+        return;
     Bitmap *b = getPrivateDataNoRaise<Bitmap>(value);
-    if (!b) return;
-    if (b->isDisposed()) return;
+    if (!b)
+        return;
+    if (b->isDisposed())
+        return;
     // `replaceRaw` pushes the CPU surface back to the GPU and marks
     // the whole bitmap tainted. We use it because it's the only
     // public API mkxp-z exposes for "I wrote to the surface, please
     // sync". If this becomes a hotspot we can add a direct uploader
     // on Bitmap that skips the memcpy-in, memcpy-out roundtrip.
     SDL_Surface *surf = b->surface();
-    if (!surf) return;
+    if (!surf)
+        return;
     const int bytes = surf->w * surf->h * 4;
     // surf->pixels is void*; replaceRaw accepts void* directly.
     b->replaceRaw(surf->pixels, bytes);
@@ -66,34 +74,43 @@ void bitmap_commit_rect(VALUE value, int x, int y, int w, int h) {
     // TODO: add `Bitmap::uploadCPURect(x,y,w,h)` in the mkxp-z fork
     // and wire it here; the perf win matters for renderHM7 which
     // modifies every pixel of `screenBitmap` every frame.
-    (void)x; (void)y; (void)w; (void)h;
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
     bitmap_commit(value);
 }
 
 int bitmap_width(VALUE value) {
-    if (NIL_P(value)) return 0;
+    if (NIL_P(value))
+        return 0;
     Bitmap *b = getPrivateDataNoRaise<Bitmap>(value);
-    if (!b || b->isDisposed()) return 0;
+    if (!b || b->isDisposed())
+        return 0;
     return b->width();
 }
 
 int bitmap_height(VALUE value) {
-    if (NIL_P(value)) return 0;
+    if (NIL_P(value))
+        return 0;
     Bitmap *b = getPrivateDataNoRaise<Bitmap>(value);
-    if (!b || b->isDisposed()) return 0;
+    if (!b || b->isDisposed())
+        return 0;
     return b->height();
 }
 
-std::int16_t *table_data(VALUE value,
-                         int *out_xsize,
-                         int *out_ysize,
-                         int *out_zsize) {
-    if (NIL_P(value)) return nullptr;
+std::int16_t *table_data(VALUE value, int *out_xsize, int *out_ysize, int *out_zsize) {
+    if (NIL_P(value))
+        return nullptr;
     Table *t = getPrivateDataNoRaise<Table>(value);
-    if (!t) return nullptr;
-    if (out_xsize) *out_xsize = t->xSize();
-    if (out_ysize) *out_ysize = t->ySize();
-    if (out_zsize) *out_zsize = t->zSize();
+    if (!t)
+        return nullptr;
+    if (out_xsize)
+        *out_xsize = t->xSize();
+    if (out_ysize)
+        *out_ysize = t->ySize();
+    if (out_zsize)
+        *out_zsize = t->zSize();
     // mkxp-z's Table keeps its storage as a private `std::vector`.
     // The public `at()` accessor returns a reference into that
     // vector, so taking its address gives us a raw pointer to the
@@ -106,9 +123,11 @@ std::int16_t *table_data(VALUE value,
 }
 
 int array_to_ints(VALUE array, int *out, int max_count) {
-    if (NIL_P(array) || !RB_TYPE_P(array, T_ARRAY)) return 0;
+    if (NIL_P(array) || !RB_TYPE_P(array, T_ARRAY))
+        return 0;
     long len = RARRAY_LEN(array);
-    if (len > max_count) len = max_count;
+    if (len > max_count)
+        len = max_count;
     for (long i = 0; i < len; ++i) {
         VALUE v = RARRAY_AREF(array, i);
         // Ruby 3.1 handles Fixnum/Bignum transparently via NUM2INT.
@@ -137,9 +156,12 @@ struct HashIterContext {
 
 extern "C" int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
     HashIterContext *ctx = reinterpret_cast<HashIterContext *>(ctx_value);
-    if (!FIXNUM_P(key)) return ST_CONTINUE;
-    if (NIL_P(val) || !RB_TYPE_P(val, T_ARRAY)) return ST_CONTINUE;
-    if (RARRAY_LEN(val) < 4) return ST_CONTINUE;
+    if (!FIXNUM_P(key))
+        return ST_CONTINUE;
+    if (NIL_P(val) || !RB_TYPE_P(val, T_ARRAY))
+        return ST_CONTINUE;
+    if (RARRAY_LEN(val) < 4)
+        return ST_CONTINUE;
 
     TileHashEntry e;
     e.key = FIX2INT(key);
@@ -153,15 +175,19 @@ extern "C" int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
 }  // namespace
 
 void hash_each_tile(VALUE hash, TileHashCallback cb, void *user_data) {
-    if (NIL_P(hash) || !RB_TYPE_P(hash, T_HASH)) return;
-    HashIterContext ctx = { cb, user_data };
+    if (NIL_P(hash) || !RB_TYPE_P(hash, T_HASH))
+        return;
+    HashIterContext ctx = {cb, user_data};
     rb_hash_foreach(hash, (int (*)(ANYARGS))hash_iter_cb, reinterpret_cast<VALUE>(&ctx));
 }
 
 int fixnum_to_int(VALUE value) {
-    if (FIXNUM_P(value)) return FIX2INT(value);
-    if (value == Qtrue) return 1;
-    if (value == Qfalse || value == Qnil) return 0;
+    if (FIXNUM_P(value))
+        return FIX2INT(value);
+    if (value == Qtrue)
+        return 1;
+    if (value == Qfalse || value == Qnil)
+        return 0;
     return NUM2INT(value);
 }
 
@@ -175,16 +201,33 @@ VALUE int_to_fixnum(int value) {
 
 namespace hm7 {
 
-SDL_Surface *bitmap_lock(VALUE) { return nullptr; }
-void bitmap_commit(VALUE) {}
-void bitmap_commit_rect(VALUE, int, int, int, int) {}
-int bitmap_width(VALUE) { return 0; }
-int bitmap_height(VALUE) { return 0; }
-std::int16_t *table_data(VALUE, int *, int *, int *) { return nullptr; }
-int array_to_ints(VALUE, int *, int) { return 0; }
-void hash_each_tile(VALUE, TileHashCallback, void *) {}
-int fixnum_to_int(VALUE) { return 0; }
-VALUE int_to_fixnum(int) { return 0; }
+SDL_Surface *bitmap_lock(VALUE) {
+    return nullptr;
+}
+void bitmap_commit(VALUE) {
+}
+void bitmap_commit_rect(VALUE, int, int, int, int) {
+}
+int bitmap_width(VALUE) {
+    return 0;
+}
+int bitmap_height(VALUE) {
+    return 0;
+}
+std::int16_t *table_data(VALUE, int *, int *, int *) {
+    return nullptr;
+}
+int array_to_ints(VALUE, int *, int) {
+    return 0;
+}
+void hash_each_tile(VALUE, TileHashCallback, void *) {
+}
+int fixnum_to_int(VALUE) {
+    return 0;
+}
+VALUE int_to_fixnum(int) {
+    return 0;
+}
 
 }  // namespace hm7
 
