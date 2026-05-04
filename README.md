@@ -7,11 +7,12 @@
 
 H-Mode7 is a pseudo-3D rotating-perspective renderer. It adds slanted top-down maps with zoom, rotation, and heightmap-based terrain elevation to RPG Maker XP. Pokemon Insurgence uses it for its flying-Pelipper intro across the Torren region; other fan games use it for cutscenes and overworld effects.
 
-The original plugin ships as a Windows-only native DLL (`MGC_Hmode7.dll`), which means no game using H-Mode7 renders correctly on iOS, Android, macOS, or any non-Windows port. This repo is a clean-room re-port targeting Ruby 3.1 / mkxp-z's `Bitmap` and `Table` APIs, so the plugin's pixel-math runs as a module linked directly into the engine instead of via `Win32API.new(...)`.
+The original plugin ships as a Windows-only native DLL (`MGC_Hmode7.dll`), which means no game using H-Mode7 renders correctly on iOS, Android, macOS, or any non-Windows port. This repo is a clean-room re-port written against mkxp-z's `Bitmap` and `Table` APIs, so the plugin's pixel-math runs as a module linked directly into the engine instead of via `Win32API.new(...)`.
 
 ## Highlights
 
 - **Drop-in replacement for `MGC_Hmode7.dll`.** Games keep their original Ruby scripts; `HM7.render_hm7(...)` (etc.) dispatches to the native module via mkxp-z's binding layer.
+- **Multi-Ruby compatible.** The same source compiles against Ruby 1.8, 1.9, 3.0, and 3.1 in mkxp-z-apple-mobile's per-version build pipeline. Vintage RGSS1 games that run on actual Ruby 1.8 (Pokemon Insurgence, etc.) get hmode7 dispatched via the matching merged `.o`.
 - **Two-DLL-era support.** Auto-detects whether a game shipped a pre-V1.3 (8-export) or V1.4+ (9-export) DLL and switches the wall-layer-selection algorithm accordingly. See [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md).
 - **Verified against Pokemon Insurgence.** The full intro cinematic renders matching the Windows reference: wall textures, Z-ordering, billboard sprites, horizon fading, heightmap relief, autotile animation, and multi-layer tile-facade rendering for buildings.
 - **No GPU.** Per-pixel, per-scanline software rasterization. Reads and writes directly into mkxp-z `Bitmap` pixel buffers and syncs back to the GL texture once per frame.
