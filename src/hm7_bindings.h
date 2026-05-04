@@ -8,10 +8,8 @@
 //
 // All binding helpers are written against the Ruby MRI C API and
 // mkxp-z's own C++ Bitmap/Table classes. None of them touch RGSS1
-// ABI, so they compile cleanly under Ruby 3.1 and are stable against
-// future MRI layout changes.
-//
-// See HMODE7_PORT_DESIGN.md §5 "Binding Layer" for the full rationale.
+// ABI, so they compile cleanly under any modern MRI version and stay
+// stable against future MRI layout changes.
 
 #ifndef HM7_BINDINGS_H
 #define HM7_BINDINGS_H
