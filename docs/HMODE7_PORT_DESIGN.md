@@ -1,7 +1,7 @@
 # MGC H-Mode7 Plugin — iOS / mkxp-z Port Design Document
 
 **Source:** `MGC_Hmode7_1_4_4.cpp` (1897 lines, Win32 DLL, RGSS1 ABI)
-**Target:** `mkxp-z-apple-mobile` engine, Ruby 3.1 MRI C API, Apple iOS
+**Target:** `mkxp-z-apple-mobile` engine, modern MRI C API (Ruby 1.8 / 1.9 / 3.0 / 3.1, compiled per-version), Apple iOS
 **Purpose:** Analysis-only document describing algorithms, data shapes, quirks, and port complexity. No code in this doc.
 
 ---
@@ -15,13 +15,13 @@ The entire DLL is self-contained and uses essentially **no Windows APIs**. The o
 - `__declspec(dllexport)` / `__declspec(dllimport)` — remove.
 - `Win32API.new` binding on the Ruby side — replace with direct Ruby C extension method bindings (`rb_define_module_function`).
 
-There is **no GDI**, **no DirectX**, **no threading**, **no IO**, **no CRT beyond malloc/free**. Math uses only integer arithmetic (no `<math.h>` despite being included). The code is almost trivially portable once the **RGSS1 ABI handling** is replaced with Ruby 3.1 MRI equivalents and the **Bitmap pixel layout** is adapted to mkxp's SDL/GL-backed `Bitmap`.
+There is **no GDI**, **no DirectX**, **no threading**, **no IO**, **no CRT beyond malloc/free**. Math uses only integer arithmetic (no `<math.h>` despite being included). The code is almost trivially portable once the **RGSS1 ABI handling** is replaced with modern MRI equivalents and the **Bitmap pixel layout** is adapted to mkxp's SDL/GL-backed `Bitmap`. The same source compiles against Ruby 1.8 through 3.1 in mkxp-z-apple-mobile's per-version build (one ABI quirk needs handling: Ruby 1.9's strict C++ callback signature on `rb_hash_foreach`, addressed via an `(int (*)(ANYARGS))` cast).
 
 **Biggest porting challenges, in order:**
 1. **Bitmap pixel access.** RGSS1 gave a flat pointer to a bottom-up DIB. mkxp-z `Bitmap` wraps a GL texture + SDL_Surface. A `raw_data`/`rawData`-style accessor must exist (mkxp-z already has `Bitmap#raw_data` and internal `SDL_Surface*` access). The plugin works on **raw BGRA bytes**, so we must guarantee linear CPU-visible memory, and sync it back to the GPU texture when done.
 2. **Table ABI.** RGSS1 exposed `Table` as a Ruby object whose memory layout held `SWORD* data` at a known offset. mkxp-z re-implements `Table` in C++; we need a `Table*`→raw `int16_t*` accessor. mkxp-z already has this (`Table::at(x,y,z)` and a data pointer).
-3. **Hash iteration.** The original DLL walked `st_table` bin chains directly. In Ruby 3.1, `st_table` internals are opaque and have changed (open addressing). We **must iterate hashes via `rb_hash_foreach`** instead of peeking bins.
-4. **Integer `__id__` tagging.** RGSS1 produced tagged integer IDs where `id << 1` yielded the raw `VALUE` pointer. In Ruby 3.1, `__id__` returns a Fixnum ID that is **not** the raw VALUE; instead we should take Ruby objects by `VALUE` directly via `rb_define_method` with the usual `VALUE self, VALUE arg1, ...` signature, bypassing `__id__` entirely.
+3. **Hash iteration.** The original DLL walked `st_table` bin chains directly. In modern Ruby (1.9+), `st_table` internals are opaque and have changed (open addressing in 2.6+). We **must iterate hashes via `rb_hash_foreach`** instead of peeking bins. Ruby 1.9's C++ build adds strict callback signature checking; the call needs an `(int (*)(ANYARGS))` cast on the callback to compile.
+4. **Integer `__id__` tagging.** RGSS1 produced tagged integer IDs where `id << 1` yielded the raw `VALUE` pointer. In modern Ruby, `__id__` returns a Fixnum ID that is **not** the raw VALUE; instead we should take Ruby objects by `VALUE` directly via `rb_define_method` with the usual `VALUE self, VALUE arg1, ...` signature, bypassing `__id__` entirely.
 5. **The big kernel `renderHM7`** (lines 763–1767, ~1010 LOC). It's a single giant function with deeply nested branches; splitting it into helpers while preserving semantics will dominate the port effort.
 
 ---
@@ -390,14 +390,14 @@ The **Ruby side** (`HM7::Cache`, 210-HM7_NEW_CLASSES.rb:1005–1038) caches per-
 - `<math.h>` — included but **not used** (all trig is precomputed on the Ruby side).
 
 ### 8.4 Ruby C API (RGSS1)
-- **Direct struct-casting from Fixnum `__id__` values.** No `rb_…` functions called from C. This is the **entire ABI-compatibility surface** that must be reimagined for Ruby 3.1 MRI.
+- **Direct struct-casting from Fixnum `__id__` values.** No `rb_…` functions called from C. This is the **entire ABI-compatibility surface** that must be reimagined for modern MRI (1.8 / 1.9 / 3.0 / 3.1).
 - Structs assumed: `RBasic`, `RArray` (with `long len`, `VALUE *ptr`), `RHash` (with `st_table *tbl`), `st_table` (with `num_bins`, `bins`), `st_table_entry` (with `key`, `record`, `next`), `RTable` (RGSS-specific, not MRI), `RGSSBITMAP` (RGSS-specific).
-- **Ruby 3.1 layout differences:**
+- **Modern MRI layout differences (1.9 onward):**
   - `RArray`: now uses embedded storage for small arrays (`ary_embed_LEN`). **Must use `RARRAY_LEN` / `RARRAY_AREF` / `RARRAY_CONST_PTR` macros.**
   - `RHash`: `st_table` is open-addressed since 2.6. Bin-chain walking is impossible. **Must use `rb_hash_foreach(hash, callback, arg)`.**
   - `RTable`: RPG Maker-specific, mkxp-z provides its own C++ class (`Table`) exposed via `TypedData`. **Use `TypedData_Get_Struct(value, Table, &Table_type, tableptr)` or mkxp-z's helper.**
   - `RGSSBITMAP`: RPG Maker-specific. mkxp-z provides `Bitmap` class. **Use mkxp-z's `Bitmap` accessor; acquire raw `SDL_Surface*` pixels or the `uint8_t*` pointer.**
-- **Fixnum tagging:** Ruby 3.1 still uses the same `RUBY_FIXNUM_FLAG = 1` (low bit) tag for 63-bit Fixnums on 64-bit. `FIX2INT` / `FIX2LONG` / `INT2FIX` handle it. **Never use `>>1` / `<<1` directly.**
+- **Fixnum tagging:** Modern Ruby still uses the same `RUBY_FIXNUM_FLAG = 1` (low bit) tag for Fixnums. `FIX2INT` / `FIX2LONG` / `INT2FIX` handle it. **Never use `>>1` / `<<1` directly.**
 
 ### 8.5 C++ standard library
 None. The source is pure C.
@@ -485,7 +485,7 @@ Ruby side:
 | `sScreenBitmap` overflow (§10.5)                            | High     | Double the width on Ruby side                          |
 | Fixed-point overflow on ARM64 with 64-bit `long`            | Medium   | Force `int32_t` in hot paths to preserve Win32 `int` semantics |
 | Performance regression (software rasterizer is heavy)       | High     | Profile on iPhone; potentially fall back to lower res; consider NEON for the inner loops in renderHM7 wall/surface columns |
-| Hash iteration order differences (Ruby 3.1 ordered hashes)  | Low      | Code doesn't depend on iteration order                 |
+| Hash iteration order differences (modern Ruby ordered hashes since 1.9) | Low      | Code doesn't depend on iteration order                 |
 | `rb_hash_foreach` re-entrancy with allocations              | Low      | Standard Ruby pattern, works fine                      |
 | Bitmap GL texture not resyncing after CPU writes            | Medium   | Call mkxp-z's `taintArea` / pixel-invalidate after each write-out |
 | Table plane-stride assumptions                              | Low      | mkxp-z's Table layout is documented: `data[z*xs*ys + y*xs + x]`, same as RGSS |
