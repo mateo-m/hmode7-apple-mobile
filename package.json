@@ -1,0 +1,8 @@
+{
+  "name": "hmode7-apple-mobile-ci-tools",
+  "private": true,
+  "description": "Pinned versions of Node-based CI lint/format tools. Not shipped with the port; consumed only by .github/workflows/.",
+  "devDependencies": {
+    "markdownlint-cli": "0.48.0"
+  }
+}
