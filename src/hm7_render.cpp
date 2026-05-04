@@ -43,26 +43,22 @@ inline const std::uint8_t *byte_row_const(const SDL_Surface *surf, int y) {
 // Helper: clamp an `int` to [0, 255] (used a lot for per-channel
 // BGR+alpha arithmetic).
 inline int clamp_u8(int v) {
-    if (v < 0) return 0;
-    if (v > 255) return 255;
+    if (v < 0)
+        return 0;
+    if (v > 255)
+        return 255;
     return v;
 }
 
 }  // namespace
 
-int render_hm7(const RenderParams &pp,
-               const RenderVars &vv,
-               const RenderSurface *surfaces,
-               int surface_count,
-               int nb_layers,
-               WallLayerMode wall_layer_mode) {
-    const bool use_top_cumulative =
-        (wall_layer_mode == WallLayerMode::TopCumulative);
+int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface *surfaces, int surface_count,
+               int nb_layers, WallLayerMode wall_layer_mode) {
+    const bool use_top_cumulative = (wall_layer_mode == WallLayerMode::TopCumulative);
 
     // Bail if critical surfaces are missing.
-    if (!pp.screen_bitmap || !pp.lightline || !pp.data_table ||
-        !pp.heightmap || !pp.map_tileset || !pp.tilemap_data ||
-        !pp.colormap || !pp.s_screen_bitmap) {
+    if (!pp.screen_bitmap || !pp.lightline || !pp.data_table || !pp.heightmap || !pp.map_tileset ||
+        !pp.tilemap_data || !pp.colormap || !pp.s_screen_bitmap) {
         return 0;
     }
 
@@ -139,7 +135,8 @@ int render_hm7(const RenderParams &pp,
         sRowSize = sWidth << 2;
     };
 
-    if (sNext) load_surface(0);
+    if (sNext)
+        load_surface(0);
 
     const int screenWidth = pp.screen_bitmap->w;
     const int a = screenWidth >> 1;
@@ -150,15 +147,24 @@ int render_hm7(const RenderParams &pp,
 
     int x0;
     int step;
-    if (filter == 0) { x0 = 0; step = 1; }
-    else if (filter == 1) { x0 = 0; step = 2; }
-    else { x0 = 1; step = 2; }
+    if (filter == 0) {
+        x0 = 0;
+        step = 1;
+    } else if (filter == 1) {
+        x0 = 0;
+        step = 2;
+    } else {
+        x0 = 1;
+        step = 2;
+    }
 
     int oCamera = 0;
 
     int y0;
-    if (heightLimit > yMin) y0 = heightLimit;
-    else y0 = yMin;
+    if (heightLimit > yMin)
+        y0 = heightLimit;
+    else
+        y0 = yMin;
 
     // Lightline rows, laid out top-down to match the Ruby side
     // which writes the seed fade color via `set_pixel(0, 0, ...)`
@@ -173,8 +179,8 @@ int render_hm7(const RenderParams &pp,
     // Row 1: per-column relief + horizontal zoom scratch.
     // Row 2: per-column topmost-drawn-Y (ym) tracking scratch.
     std::uint8_t *lightLightRow = byte_row(pp.lightline, 0);  // per-row lux
-    std::uint8_t *reliefRow     = byte_row(pp.lightline, 1);  // relief
-    std::uint8_t *ymRow         = byte_row(pp.lightline, 2);  // ym tracking
+    std::uint8_t *reliefRow = byte_row(pp.lightline, 1);      // relief
+    std::uint8_t *ymRow = byte_row(pp.lightline, 2);          // ym tracking
 
     // Bootstrap sCmin/sCmax for pre-surface pass (used only when
     // yt == yMax-1 sInitZoomData gate fires).
@@ -233,8 +239,10 @@ int render_hm7(const RenderParams &pp,
                     } else {
                         sXmin = (sScreenX1 & 1) ? (sScreenX1 + 1) : sScreenX1;
                     }
-                    if (sXmin >= xMax) sXmin = xMax - 1;
-                    else if (sXmin < xMin) sXmin = xMin + x0;
+                    if (sXmin >= xMax)
+                        sXmin = xMax - 1;
+                    else if (sXmin < xMin)
+                        sXmin = xMin + x0;
 
                     int sC1, sC2;
                     if (sScreenY1 >= yMax) {
@@ -255,8 +263,10 @@ int render_hm7(const RenderParams &pp,
                             sC2 = (lp3[0] << 8) + lp3[1];
                         }
                     }
-                    if (!sC1) sC1 = 1;
-                    if (!sC2) sC2 = 1;
+                    if (!sC1)
+                        sC1 = 1;
+                    if (!sC2)
+                        sC2 = 1;
 
                     for (int sXt = sXmin; sXt < sXmax; sXt += step) {
                         int sH0, dx1, dx2;
@@ -270,15 +280,18 @@ int render_hm7(const RenderParams &pp,
                             dx2 = ((sScreenX2 - 1 - sXt) << 12) / sC2;
                         }
                         sH0 = sH0 - (sScreenY1 - yt);
-                        if (rYt - sH0 < yMin) continue;
-                        if (!(dx1 + dx2)) continue;
+                        if (rYt - sH0 < yMin)
+                            continue;
+                        if (!(dx1 + dx2))
+                            continue;
                         int sX;
                         if (sInverse) {
                             sX = (sDispOffset + (sDispWidth * dx2) / (dx1 + dx2)) << 2;
                         } else {
                             sX = (sDispOffset + (sDispWidth * dx1) / (dx1 + dx2)) << 2;
                         }
-                        if (sX < 0 || sX >= sRowSize) continue;
+                        if (sX < 0 || sX >= sRowSize)
+                            continue;
 
                         int sLux_b = 0, sLux_g = 0, sLux_r = 0, sLux_d = 0;
                         int sFYt, sFYth, sHbase;
@@ -291,7 +304,10 @@ int render_hm7(const RenderParams &pp,
                             sHbase = 0;
                         } else {
                             std::uint8_t *ll = lightLightRow + ((yt - sH0) << 2);
-                            sLux_b = ll[0]; sLux_g = ll[1]; sLux_r = ll[2]; sLux_d = ll[3];
+                            sLux_b = ll[0];
+                            sLux_g = ll[1];
+                            sLux_r = ll[2];
+                            sLux_d = ll[3];
                             std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
                             // Sprites are BILLBOARDS. They always
                             // face the camera: they rotate with
@@ -324,9 +340,11 @@ int render_hm7(const RenderParams &pp,
 
                         sH0 += (sDh * sFYth >> 15);
                         int sHend = (sH0 < 0) ? 0 : sH0;
-                        if (rYt - sH0 < yMin) continue;
+                        if (rYt - sH0 < yMin)
+                            continue;
                         int sRealHeight = (sHeight * sFYt) >> 12;
-                        if (sRealHeight < 2) continue;
+                        if (sRealHeight < 2)
+                            continue;
 
                         int sHinit;
                         if (rYt - sRealHeight - sH0 < yMin) {
@@ -344,10 +362,12 @@ int render_hm7(const RenderParams &pp,
                             sHMax = (ylp[0] << 8) + ylp[1];
                         }
 
-                        for (int h = sHinit; h > sHend; ) {
+                        for (int h = sHinit; h > sHend;) {
                             --h;
-                            if (rYt - h > sHMax) break;
-                            if (rYt - h > yMaxDraw - 1) break;
+                            if (rYt - h > sHMax)
+                                break;
+                            if (rYt - h > yMaxDraw - 1)
+                                break;
 
                             // Original source row math (bottom-up DIB):
                             //   sData = firstSRow
@@ -374,18 +394,19 @@ int render_hm7(const RenderParams &pp,
                             // on-screen) and should sample row sHeight-1. At h=0:
                             //   X = 0, N = sHeight-1 (bottom) ✓
                             const int src_row = (sHeight - 1) - ((h - sH0) * sFh >> 10);
-                            if (src_row < 0 || src_row >= sHeight) continue;
-                            const std::uint8_t *sData =
-                                byte_row_const(sBitmap, src_row) + sX;
-                            if (!sData[3]) continue;
+                            if (src_row < 0 || src_row >= sHeight)
+                                continue;
+                            const std::uint8_t *sData = byte_row_const(sBitmap, src_row) + sX;
+                            if (!sData[3])
+                                continue;
 
                             // sScreenData position. Original:
                             //   sScreenData = firstSScreenRow - (rYt - h) * sScreenRowSize + (sXt << 3)
                             // top-down: row = rYt - h
                             const int ss_row = rYt - h;
-                            if (ss_row < 0 || ss_row >= pp.s_screen_bitmap->h) continue;
-                            std::uint8_t *sScreenData =
-                                byte_row(pp.s_screen_bitmap, ss_row) + (sXt << 3);
+                            if (ss_row < 0 || ss_row >= pp.s_screen_bitmap->h)
+                                continue;
+                            std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, ss_row) + (sXt << 3);
 
                             if (sScreenData[0] && !sScreenData[1] && sScreenData[7] == 255) {
                                 continue;
@@ -396,16 +417,20 @@ int render_hm7(const RenderParams &pp,
                             int red = sData[2];
                             int alpha = sData[3];
                             if (sLux_d) {
-                                blue += sLux_b; green += sLux_g; red += sLux_r;
+                                blue += sLux_b;
+                                green += sLux_g;
+                                red += sLux_r;
                                 blue = std::min(blue, 255);
                                 green = std::min(green, 255);
                                 red = std::min(red, 255);
                             } else {
-                                blue -= sLux_b; green -= sLux_g; red -= sLux_r;
+                                blue -= sLux_b;
+                                green -= sLux_g;
+                                red -= sLux_r;
                             }
 
-                            if (sScreenData[0] &&
-                                (sBlend || sData[3] < 255 || sScreenData[2] + sScreenData[3] >= rYt - sHend)) {
+                            if (sScreenData[0] && (sBlend || sData[3] < 255 ||
+                                                   sScreenData[2] + sScreenData[3] >= rYt - sHend)) {
                                 const int blend = sScreenData[1];
                                 const int sOpacity = sScreenData[7];
                                 if (!blend) {
@@ -481,10 +506,8 @@ int render_hm7(const RenderParams &pp,
             if (!loopX) {
                 if (xs >= mapWidthPx || xs < 0) {
                     if (rYt < ym && rYt < yMaxDraw) {
-                        std::uint8_t *screenData =
-                            byte_row(pp.screen_bitmap, rYt) + (xt << 2);
-                        std::uint8_t *sScreenData =
-                            byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
+                        std::uint8_t *screenData = byte_row(pp.screen_bitmap, rYt) + (xt << 2);
+                        std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
                         if (sScreenData[0]) {
                             int blue, green, red;
                             if (!sScreenData[1] && sScreenData[7] == 255) {
@@ -494,7 +517,9 @@ int render_hm7(const RenderParams &pp,
                             } else {
                                 const int blend = sScreenData[1];
                                 if (blend == 2) {
-                                    blue = 0; green = 0; red = 0;
+                                    blue = 0;
+                                    green = 0;
+                                    red = 0;
                                 } else {
                                     const int sOpacity = sScreenData[7];
                                     blue = (sScreenData[4] * sOpacity) >> 8;
@@ -520,17 +545,17 @@ int render_hm7(const RenderParams &pp,
                     continue;
                 }
             } else {
-                if (xs >= mapWidthPx) xs -= mapWidthPx * (xs / mapWidthPx);
-                else if (xs < 0) xs -= mapWidthPx * (xs / mapWidthPx - 1);
+                if (xs >= mapWidthPx)
+                    xs -= mapWidthPx * (xs / mapWidthPx);
+                else if (xs < 0)
+                    xs -= mapWidthPx * (xs / mapWidthPx - 1);
             }
 
             if (!loopY) {
                 if (ys >= mapHeightPx || ys < 0) {
                     if (rYt < ym && rYt < yMaxDraw) {
-                        std::uint8_t *screenData =
-                            byte_row(pp.screen_bitmap, rYt) + (xt << 2);
-                        std::uint8_t *sScreenData =
-                            byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
+                        std::uint8_t *screenData = byte_row(pp.screen_bitmap, rYt) + (xt << 2);
+                        std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
                         if (sScreenData[0]) {
                             int blue, green, red;
                             if (!sScreenData[1] && sScreenData[7] == 255) {
@@ -540,7 +565,9 @@ int render_hm7(const RenderParams &pp,
                             } else {
                                 const int blend = sScreenData[1];
                                 if (blend == 2) {
-                                    blue = 0; green = 0; red = 0;
+                                    blue = 0;
+                                    green = 0;
+                                    red = 0;
                                 } else {
                                     const int sOpacity = sScreenData[7];
                                     blue = (sScreenData[4] * sOpacity) >> 8;
@@ -566,14 +593,16 @@ int render_hm7(const RenderParams &pp,
                     continue;
                 }
             } else {
-                if (ys >= mapHeightPx) ys -= mapHeightPx * (ys / mapHeightPx);
-                else while (ys < 0) ys += mapHeightPx;
+                if (ys >= mapHeightPx)
+                    ys -= mapHeightPx * (ys / mapHeightPx);
+                else
+                    while (ys < 0)
+                        ys += mapHeightPx;
             }
 
             // Tile lookup in tilemap.
-            const std::int16_t *ptrTileIndex = pp.tilemap_data
-                + (ys >> 5) * pp.tilemap_xsize
-                + (xs >> 5) * (nb_layers + 1);
+            const std::int16_t *ptrTileIndex =
+                pp.tilemap_data + (ys >> 5) * pp.tilemap_xsize + (xs >> 5) * (nb_layers + 1);
             const int tileIndex = *ptrTileIndex;
 
             for (int itLayer = 0; itLayer < nb_layers; ++itLayer) {
@@ -588,8 +617,7 @@ int render_hm7(const RenderParams &pp,
             const int ysr = ys & 31;
 
             // mapTilesetData = mapTileset[yts, xts*4]
-            const std::uint8_t *mapTilesetData =
-                byte_row_const(pp.map_tileset, yts) + (xts << 2);
+            const std::uint8_t *mapTilesetData = byte_row_const(pp.map_tileset, yts) + (xts << 2);
 
             // dy from heightmap plane 0 * h_coeff.
             int dy = (pp.heightmap[(xs << 1) + ys * pp.heightmap_xsize] * h_coeff) >> 15;
@@ -614,9 +642,12 @@ int render_hm7(const RenderParams &pp,
             }
             if (yt + 1 == ysize) {
                 int ody_cam;
-                if (cam > 1) ody_cam = dy;
-                else ody_cam = dy - totHA;
-                if (ody_cam > oCamera) oCamera = ody_cam;
+                if (cam > 1)
+                    ody_cam = dy;
+                else
+                    ody_cam = dy - totHA;
+                if (ody_cam > oCamera)
+                    oCamera = ody_cam;
             }
             int ody = rYt - dy;
 
@@ -664,8 +695,10 @@ int render_hm7(const RenderParams &pp,
                                 sC2 = (lp3[0] << 8) + lp3[1];
                             }
                         }
-                        if (!sC1) sC1 = 1;
-                        if (!sC2) sC2 = 1;
+                        if (!sC1)
+                            sC1 = 1;
+                        if (!sC2)
+                            sC2 = 1;
 
                         for (int sXt = sXmin; sXt < sXmax; sXt += step) {
                             int sH0, dx1, dx2;
@@ -679,12 +712,17 @@ int render_hm7(const RenderParams &pp,
                                 dx2 = ((sScreenX2 - 1 - sXt) << 12) / sC2;
                             }
                             sH0 = sH0 - (sScreenY1 - yt);
-                            if (rYt - sH0 < yMin) continue;
-                            if (!(dx1 + dx2)) continue;
+                            if (rYt - sH0 < yMin)
+                                continue;
+                            if (!(dx1 + dx2))
+                                continue;
                             int sX;
-                            if (sInverse) sX = (sDispOffset + (sDispWidth * dx2) / (dx1 + dx2)) << 2;
-                            else          sX = (sDispOffset + (sDispWidth * dx1) / (dx1 + dx2)) << 2;
-                            if (sX < 0 || sX >= sRowSize) continue;
+                            if (sInverse)
+                                sX = (sDispOffset + (sDispWidth * dx2) / (dx1 + dx2)) << 2;
+                            else
+                                sX = (sDispOffset + (sDispWidth * dx1) / (dx1 + dx2)) << 2;
+                            if (sX < 0 || sX >= sRowSize)
+                                continue;
 
                             int sLux_b = 0, sLux_g = 0, sLux_r = 0, sLux_d = 0;
                             int sFYt, sFYth, sHbase;
@@ -695,7 +733,10 @@ int render_hm7(const RenderParams &pp,
                                 sHbase = 0;
                             } else {
                                 std::uint8_t *ll = lightLightRow + ((yt - sH0) << 2);
-                                sLux_b = ll[0]; sLux_g = ll[1]; sLux_r = ll[2]; sLux_d = ll[3];
+                                sLux_b = ll[0];
+                                sLux_g = ll[1];
+                                sLux_r = ll[2];
+                                sLux_d = ll[3];
                                 std::uint8_t *lr = reliefRow + ((yt - sH0) << 2);
                                 // Sprites are billboards: use the
                                 // depth-proportional zoom from
@@ -710,40 +751,49 @@ int render_hm7(const RenderParams &pp,
 
                             sH0 += (sDh * sFYth) >> 15;
                             int sHend = (sH0 < 0) ? 0 : sH0;
-                            if (rYt - sH0 < yMin) continue;
+                            if (rYt - sH0 < yMin)
+                                continue;
                             int sRealHeight = (sHeight * sFYt) >> 12;
-                            if (sRealHeight < 2) continue;
+                            if (sRealHeight < 2)
+                                continue;
 
                             int sHinit;
-                            if (rYt - sRealHeight - sH0 < yMin) sHinit = rYt - yMin;
-                            else                                 sHinit = sRealHeight + sH0;
+                            if (rYt - sRealHeight - sH0 < yMin)
+                                sHinit = rYt - yMin;
+                            else
+                                sHinit = sRealHeight + sH0;
                             int sFh = ((sHeight - 1) << 10) / (sRealHeight - 1);
 
                             int sHMax;
-                            if (yt == yMax - 1) sHMax = ysize + oScrY;
+                            if (yt == yMax - 1)
+                                sHMax = ysize + oScrY;
                             else {
                                 std::uint8_t *ylp2 = ymRow + (sXt << 2);
                                 sHMax = (ylp2[0] << 8) + ylp2[1];
                             }
 
-                            for (int h = sHinit; h > sHend; ) {
+                            for (int h = sHinit; h > sHend;) {
                                 --h;
-                                if (rYt - h > sHMax) break;
-                                if (rYt - h > yMaxDraw - 1) break;
+                                if (rYt - h > sHMax)
+                                    break;
+                                if (rYt - h > yMaxDraw - 1)
+                                    break;
                                 // Source row: see long explanation in the
                                 // pre-surfaces pass above. Display row index
                                 // is `sHeight - 1 - ((h - sH0) * sFh >> 10)`
                                 // and in top-down SDL that equals the memory
                                 // row we want.
                                 const int src_row = (sHeight - 1) - ((h - sH0) * sFh >> 10);
-                                if (src_row < 0 || src_row >= sHeight) continue;
+                                if (src_row < 0 || src_row >= sHeight)
+                                    continue;
                                 const std::uint8_t *sData = byte_row_const(sBitmap, src_row) + sX;
-                                if (!sData[3]) continue;
+                                if (!sData[3])
+                                    continue;
 
                                 const int ss_row = rYt - h;
-                                if (ss_row < 0 || ss_row >= pp.s_screen_bitmap->h) continue;
-                                std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, ss_row)
-                                                           + (sXt << 3);
+                                if (ss_row < 0 || ss_row >= pp.s_screen_bitmap->h)
+                                    continue;
+                                std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, ss_row) + (sXt << 3);
 
                                 if (sScreenData[0] && !sScreenData[1] && sScreenData[7] == 255 &&
                                     sScreenData[2] + sScreenData[3] + 2 >= rYt - sHend) {
@@ -752,15 +802,19 @@ int render_hm7(const RenderParams &pp,
 
                                 int blue = sData[0], green = sData[1], red = sData[2], alpha_s = sData[3];
                                 if (sLux_d) {
-                                    blue += sLux_b; green += sLux_g; red += sLux_r;
+                                    blue += sLux_b;
+                                    green += sLux_g;
+                                    red += sLux_r;
                                     blue = std::min(blue, 255);
                                     green = std::min(green, 255);
                                     red = std::min(red, 255);
                                 } else {
-                                    blue -= sLux_b; green -= sLux_g; red -= sLux_r;
+                                    blue -= sLux_b;
+                                    green -= sLux_g;
+                                    red -= sLux_r;
                                 }
-                                if (sScreenData[0] &&
-                                    (sBlend || sData[3] < 255 || sScreenData[2] + sScreenData[3] >= rYt - sHend)) {
+                                if (sScreenData[0] && (sBlend || sData[3] < 255 ||
+                                                       sScreenData[2] + sScreenData[3] >= rYt - sHend)) {
                                     const int blend = sScreenData[1];
                                     const int sOpacity = sScreenData[7];
                                     if (!blend) {
@@ -779,7 +833,8 @@ int render_hm7(const RenderParams &pp,
                                         green -= (sScreenData[5] * sOpacity) >> 8;
                                         red -= (sScreenData[6] * sOpacity) >> 8;
                                     }
-                                    alpha_s = ~static_cast<char>(((255 - alpha_s) * (255 - sScreenData[7])) / 255);
+                                    alpha_s =
+                                        ~static_cast<char>(((255 - alpha_s) * (255 - sScreenData[7])) / 255);
                                 }
                                 blue = clamp_u8(blue);
                                 green = clamp_u8(green);
@@ -814,7 +869,8 @@ int render_hm7(const RenderParams &pp,
                 }
             }
 
-            if (ym <= ody) continue;
+            if (ym <= ody)
+                continue;
 
             // Wall draw: vertical column from dy up to ym.
             int ground = 0;
@@ -824,10 +880,12 @@ int render_hm7(const RenderParams &pp,
             int pos = 0;
 
             for (int yd = dy; rYt - yd < ym; --yd) {
-                if (rYt - yd + 1 - yMaxDraw > 0) break;
+                if (rYt - yd + 1 - yMaxDraw > 0)
+                    break;
 
                 const int screen_row = rYt - yd;
-                if (screen_row < 0 || screen_row >= pp.screen_bitmap->h) continue;
+                if (screen_row < 0 || screen_row >= pp.screen_bitmap->h)
+                    continue;
                 std::uint8_t *screenData = byte_row(pp.screen_bitmap, screen_row) + (xt << 2);
                 std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, screen_row) + (xt << 3);
 
@@ -842,7 +900,10 @@ int render_hm7(const RenderParams &pp,
                 }
 
                 if (yd < dy && yt + 1 == yMax && !noBlack) {
-                    screenData[0] = 0; screenData[1] = 0; screenData[2] = 0; screenData[3] = 255;
+                    screenData[0] = 0;
+                    screenData[1] = 0;
+                    screenData[2] = 0;
+                    screenData[3] = 255;
                     sScreenData[0] = 0;
                 } else {
                     if (dy - yd > 0) {
@@ -852,9 +913,7 @@ int render_hm7(const RenderParams &pp,
                         int totHA_i = 0;
                         ground = 1;
                         for (int itLayer = nb_layers - 1; itLayer >= 0; --itLayer) {
-                            const int threshold = use_top_cumulative
-                                ? (totHA_i + hA[itLayer])
-                                : dA[itLayer];
+                            const int threshold = use_top_cumulative ? (totHA_i + hA[itLayer]) : dA[itLayer];
                             if (dy - yd <= threshold) {
                                 if (!initA[itLayer]) {
                                     int ti = ptrTileIndex[itLayer + 1] << 5;
@@ -882,8 +941,8 @@ int render_hm7(const RenderParams &pp,
                                             if (cm_row2 < 0 || cm_row2 >= pp.colormap->h) {
                                                 colormapData = nullptr;
                                             } else {
-                                                colormapData = byte_row_const(pp.colormap, cm_row2)
-                                                             + (oColor << 2);
+                                                colormapData =
+                                                    byte_row_const(pp.colormap, cm_row2) + (oColor << 2);
                                             }
                                         } else {
                                             colormapData = cmRow + (oColor << 2);
@@ -892,8 +951,9 @@ int render_hm7(const RenderParams &pp,
                                     initA[itLayer] = 1;
                                 }
                                 if (hA[itLayer] != 0) {
-                                    pos = (31 - lA[itLayer]
-                                         + ((dy + odyh - yd - totHA_i) * lA[itLayer]) / hA[itLayer]) << 2;
+                                    pos = (31 - lA[itLayer] +
+                                           ((dy + odyh - yd - totHA_i) * lA[itLayer]) / hA[itLayer])
+                                          << 2;
                                 } else {
                                     pos = 0;
                                 }
@@ -932,9 +992,13 @@ int render_hm7(const RenderParams &pp,
                     }
 
                     if (lux_d) {
-                        blue += lux_b; green += lux_g; red += lux_r;
+                        blue += lux_b;
+                        green += lux_g;
+                        red += lux_r;
                         if (shadow && (top_flag || ground)) {
-                            blue += oShadow; green += oShadow; red += oShadow;
+                            blue += oShadow;
+                            green += oShadow;
+                            red += oShadow;
                             blue = clamp_u8(blue);
                             green = clamp_u8(green);
                             red = clamp_u8(red);
@@ -944,9 +1008,13 @@ int render_hm7(const RenderParams &pp,
                             red = std::min(red, 255);
                         }
                     } else {
-                        blue -= lux_b; green -= lux_g; red -= lux_r;
+                        blue -= lux_b;
+                        green -= lux_g;
+                        red -= lux_r;
                         if (shadow && (top_flag || ground)) {
-                            blue += oShadow; green += oShadow; red += oShadow;
+                            blue += oShadow;
+                            green += oShadow;
+                            red += oShadow;
                         }
                         blue = clamp_u8(blue);
                         green = clamp_u8(green);
@@ -1002,7 +1070,8 @@ int render_hm7(const RenderParams &pp,
         std::uint8_t *ylp = ymRow + (xt << 2);
         const int y0min = (ylp[0] << 8) + ylp[1];
         for (int yt = y0min - 1; yt >= yMin; --yt) {
-            if (yt < 0 || yt >= pp.screen_bitmap->h) continue;
+            if (yt < 0 || yt >= pp.screen_bitmap->h)
+                continue;
             std::uint8_t *screenData = byte_row(pp.screen_bitmap, yt) + (xt << 2);
             std::uint8_t *sScreenData = byte_row(pp.s_screen_bitmap, yt) + (xt << 3);
             if (sScreenData[0]) {
@@ -1014,7 +1083,9 @@ int render_hm7(const RenderParams &pp,
                 } else {
                     const int blend = sScreenData[1];
                     if (blend == 2) {
-                        blue = 0; green = 0; red = 0;
+                        blue = 0;
+                        green = 0;
+                        red = 0;
                     } else {
                         const int sOpacity = sScreenData[7];
                         blue = (sScreenData[4] * sOpacity) >> 8;

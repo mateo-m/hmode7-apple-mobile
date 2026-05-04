@@ -48,11 +48,11 @@ struct RenderParams {
 
 // Per-frame vars array from the Ruby side's @vars. Design doc §2.3.
 struct RenderVars {
-    int height_limit;   // [0] horizon clip
-    int display_x;      // [1]
-    int display_y;      // [2]
-    int filter;         // [3] 0=no filter, 1=even cols, 2=odd cols
-    int o_scr_y;        // [4] camera Y offset
+    int height_limit;  // [0] horizon clip
+    int display_x;     // [1]
+    int display_y;     // [2]
+    int filter;        // [3] 0=no filter, 1=even cols, 2=odd cols
+    int o_scr_y;       // [4] camera Y offset
 };
 
 // One surface (billboard sprite) entry. Design doc §2.4. Fields
@@ -99,7 +99,7 @@ struct RenderSurface {
 // the mode via the Ruby-side HM7::Native::WALL_LAYER_MODE constant
 // which the binding layer forwards as `params.wall_layer_mode`.
 enum class WallLayerMode : int {
-    TopCumulative    = 0,  // v1.2.x / pre-V1.3 DLL
+    TopCumulative = 0,     // v1.2.x / pre-V1.3 DLL
     BottomCumulative = 1,  // v1.4.4 reference
 };
 
@@ -108,12 +108,8 @@ enum class WallLayerMode : int {
 // Y offset in modes 1/2.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 763-1767, ~1010 LOC.
-int render_hm7(const RenderParams &p,
-               const RenderVars &v,
-               const RenderSurface *surfaces,
-               int surface_count,
-               int nb_layers,
-               WallLayerMode wall_layer_mode = WallLayerMode::TopCumulative);
+int render_hm7(const RenderParams &p, const RenderVars &v, const RenderSurface *surfaces, int surface_count,
+               int nb_layers, WallLayerMode wall_layer_mode = WallLayerMode::TopCumulative);
 
 }  // namespace hm7
 

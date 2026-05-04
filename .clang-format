@@ -1,0 +1,24 @@
+# clang-format config for the hmode7 port. Mirrors the parent
+# engine's iOS code style: 4-space indent, brace-on-same-line,
+# 110-col, pointer-right.
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 110
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AccessModifierOffset: -4
+NamespaceIndentation: None
+PointerAlignment: Right
+SortIncludes: false
+SortUsingDeclarations: false
+SpacesBeforeTrailingComments: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+IncludeBlocks: Preserve

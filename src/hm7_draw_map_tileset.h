@@ -40,22 +40,15 @@ struct TileEntry {
 // `auto_heightsets[0..6]` — matching autotile heightset bitmaps
 //                          (filled only by drawMapTileset; unused
 //                          in refresh).
-void draw_map_tileset_entry(SDL_Surface *map_tileset,
-                            SDL_Surface *tileset,
-                            SDL_Surface *heightset,
-                            const TileEntry &e,
-                            SDL_Surface **auto_tilesets, int auto_tilesets_len,
-                            SDL_Surface **auto_heightsets, int auto_heightsets_len,
-                            int nb_layers);
+void draw_map_tileset_entry(SDL_Surface *map_tileset, SDL_Surface *tileset, SDL_Surface *heightset,
+                            const TileEntry &e, SDL_Surface **auto_tilesets, int auto_tilesets_len,
+                            SDL_Surface **auto_heightsets, int auto_heightsets_len, int nb_layers);
 
 // Refresh path: only rewrite colors for animated-autotile frames.
 // Heights / bush byte are preserved from the prior drawMapTileset
 // pass. Much faster per-entry than the full draw path.
-void refresh_map_tileset_entry(SDL_Surface *map_tileset,
-                               SDL_Surface *tileset,
-                               const TileEntry &e,
-                               SDL_Surface **auto_tilesets, int auto_tilesets_len,
-                               int nb_layers);
+void refresh_map_tileset_entry(SDL_Surface *map_tileset, SDL_Surface *tileset, const TileEntry &e,
+                               SDL_Surface **auto_tilesets, int auto_tilesets_len, int nb_layers);
 
 }  // namespace hm7
 

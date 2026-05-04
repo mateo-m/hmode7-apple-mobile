@@ -23,12 +23,8 @@ namespace hm7 {
 // `texture` — the texture bitmap from entry[1] (tile-specific).
 // `texture_auto` — the shared autotile texture bitmap.
 // `anim_nbr`, `anim_index` — frame index math for animated tiles.
-void draw_textureset_entry(SDL_Surface *colormap,
-                           int tile_num,
-                           int tile_value,
-                           SDL_Surface *texture,
-                           SDL_Surface *texture_auto,
-                           int anim_nbr, int anim_index);
+void draw_textureset_entry(SDL_Surface *colormap, int tile_num, int tile_value, SDL_Surface *texture,
+                           SDL_Surface *texture_auto, int anim_nbr, int anim_index);
 
 }  // namespace hm7
 

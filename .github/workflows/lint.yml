@@ -1,0 +1,40 @@
+name: Lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  cpp:
+    name: C++ (clang-format)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: clang-format check
+        run: |
+          FILES=$(git ls-files 'src/*.cpp' 'src/*.h')
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs xcrun clang-format --dry-run --Werror
+          fi
+
+  markdown:
+    name: Markdown (markdownlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli@0.48
+
+      - name: markdownlint
+        run: |
+          FILES=$(git ls-files '*.md')
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs markdownlint -c .markdownlint.json
+          fi

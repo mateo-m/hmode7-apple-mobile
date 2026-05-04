@@ -44,13 +44,11 @@ static_assert(sizeof(Pixel) == 4, "Pixel must be 4 bytes");
 // SDL surfaces use `surface->pitch` which is typically `width*4` with
 // occasional padding.
 inline Pixel *hm7_row_ptr(SDL_Surface *surf, int y) {
-    return reinterpret_cast<Pixel *>(
-        static_cast<std::uint8_t *>(surf->pixels) + y * surf->pitch);
+    return reinterpret_cast<Pixel *>(static_cast<std::uint8_t *>(surf->pixels) + y * surf->pitch);
 }
 
 inline const Pixel *hm7_row_ptr_const(const SDL_Surface *surf, int y) {
-    return reinterpret_cast<const Pixel *>(
-        static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch);
+    return reinterpret_cast<const Pixel *>(static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch);
 }
 
 }  // namespace hm7

@@ -35,14 +35,16 @@
 namespace hm7 {
 
 int apply_zoom(SDL_Surface *bmp, SDL_Surface *src, int lissage) {
-    if (!bmp || !src) return -1;
+    if (!bmp || !src)
+        return -1;
 
     const int wBmp = bmp->w;
     const int hBmp = bmp->h;
     const int wSrc = src->w;
     const int hSrc = src->h;
 
-    if (wBmp <= 0 || hBmp <= 0 || wSrc <= 0 || hSrc <= 0) return -1;
+    if (wBmp <= 0 || hBmp <= 0 || wSrc <= 0 || hSrc <= 0)
+        return -1;
 
     for (int i = 0; i < hBmp; ++i) {
         // `i` is the top-down destination row. The original used
@@ -99,9 +101,9 @@ int apply_zoom(SDL_Surface *bmp, SDL_Surface *src, int lissage) {
             // math. Sum <= 64 (8 * 8), and per-channel values
             // fit in int32 comfortably.
             int c1 = p1.a ? isrc * jsrc : 0;
-            int c2 = p2.a ? isrc * jsr  : 0;
-            int c3 = p3.a ? isr  * jsrc : 0;
-            int c4 = p4.a ? isr  * jsr  : 0;
+            int c2 = p2.a ? isrc * jsr : 0;
+            int c3 = p3.a ? isr * jsrc : 0;
+            int c4 = p4.a ? isr * jsr : 0;
             int total = c1 + c2 + c3 + c4;
 
             if (total == 0) {
@@ -110,14 +112,10 @@ int apply_zoom(SDL_Surface *bmp, SDL_Surface *src, int lissage) {
                 continue;
             }
 
-            dst.r = static_cast<std::uint8_t>(
-                (c1 * p1.r + c2 * p2.r + c3 * p3.r + c4 * p4.r) >> 6);
-            dst.g = static_cast<std::uint8_t>(
-                (c1 * p1.g + c2 * p2.g + c3 * p3.g + c4 * p4.g) >> 6);
-            dst.b = static_cast<std::uint8_t>(
-                (c1 * p1.b + c2 * p2.b + c3 * p3.b + c4 * p4.b) >> 6);
-            dst.a = static_cast<std::uint8_t>(
-                (c1 * p1.a + c2 * p2.a + c3 * p3.a + c4 * p4.a) >> 6);
+            dst.r = static_cast<std::uint8_t>((c1 * p1.r + c2 * p2.r + c3 * p3.r + c4 * p4.r) >> 6);
+            dst.g = static_cast<std::uint8_t>((c1 * p1.g + c2 * p2.g + c3 * p3.g + c4 * p4.g) >> 6);
+            dst.b = static_cast<std::uint8_t>((c1 * p1.b + c2 * p2.b + c3 * p3.b + c4 * p4.b) >> 6);
+            dst.a = static_cast<std::uint8_t>((c1 * p1.a + c2 * p2.a + c3 * p3.a + c4 * p4.a) >> 6);
         }
     }
 
