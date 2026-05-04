@@ -29,7 +29,7 @@
 namespace hm7 {
 
 // 4-byte pixel matching mkxp-z's Apple/Android ABGR8888 byte layout.
-// Named b/g/r/a so the original BGRA-ordered source reads naturally.
+// Named b/g/r/a so the original BGRA-ordered source maps directly without re-indexing.
 struct Pixel {
     std::uint8_t r;
     std::uint8_t g;
