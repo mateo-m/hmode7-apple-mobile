@@ -155,7 +155,7 @@ extern "C" int hash_iter_cb(VALUE key, VALUE val, VALUE ctx_value) {
 void hash_each_tile(VALUE hash, TileHashCallback cb, void *user_data) {
     if (NIL_P(hash) || !RB_TYPE_P(hash, T_HASH)) return;
     HashIterContext ctx = { cb, user_data };
-    rb_hash_foreach(hash, hash_iter_cb, reinterpret_cast<VALUE>(&ctx));
+    rb_hash_foreach(hash, (int (*)(ANYARGS))hash_iter_cb, reinterpret_cast<VALUE>(&ctx));
 }
 
 int fixnum_to_int(VALUE value) {
