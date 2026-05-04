@@ -16,18 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install clang-format
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang-format
-
       - name: clang-format check
-        run: |
-          FILES=$(git ls-files 'src/*.cpp' 'src/*.h')
-          if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs clang-format -i
-            if ! git diff --exit-code -- $FILES; then
-              echo "::error::clang-format would modify files. Run \`clang-format -i src/*.cpp src/*.h\` locally and commit."
-              exit 1
-            fi
-          fi
+        uses: DoozyX/clang-format-lint-action@v0.20
+        with:
+          source: "src"
+          extensions: "h,cpp"
+          clangFormatVersion: 18
