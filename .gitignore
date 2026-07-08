@@ -1,6 +1,3 @@
 
 # Node tool caches (CI uses bun + bun.lock instead).
 node_modules/
-
-# Optional per-machine lefthook overrides; canonical config is lefthook.yml.
-lefthook-local.yml
