@@ -14,11 +14,18 @@
 //
 //   Windows (BGRA, bottom-up)          iOS port (RGBA, top-down)
 //   --------------------------         -------------------------
-//   data[0]  (blue)                    pixel.b
-//   data[1]  (green)                   pixel.g
-//   data[2]  (red)                     pixel.r
-//   data[3]  (alpha)                   pixel.a
+//   data[0]                            pixel.r  (byte 0)
+//   data[1]                            pixel.g  (byte 1)
+//   data[2]                            pixel.b  (byte 2)
+//   data[3]                            pixel.a  (byte 3)
 //   firstRow - y*pitch                 hm7_row_ptr(bmp, y)
+//
+// Read that table by BYTE POSITION, not by channel name. The port
+// keeps the original's variable names on the original's byte offsets,
+// so a value the source calls "blue" lands in byte 0, which this
+// header calls `r`. Source and destination use the same convention,
+// so the channels pass through unchanged. Do not "correct" one side
+// alone: that swaps red and blue on screen.
 
 #ifndef HM7_PIXELS_H
 #define HM7_PIXELS_H
@@ -29,7 +36,7 @@
 namespace hm7 {
 
 // 4-byte pixel matching mkxp-z's Apple/Android ABGR8888 byte layout.
-// Named b/g/r/a so the original BGRA-ordered source maps directly without re-indexing.
+// The fields are in memory order, so `r` is byte 0.
 struct Pixel {
     std::uint8_t r;
     std::uint8_t g;
@@ -49,6 +56,17 @@ inline Pixel *hm7_row_ptr(SDL_Surface *surf, int y) {
 
 inline const Pixel *hm7_row_ptr_const(const SDL_Surface *surf, int y) {
     return reinterpret_cast<const Pixel *>(static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch);
+}
+
+// Same row accessor as `hm7_row_ptr`, but as raw bytes. The kernels
+// that keep the original's byte indexing (`data[0]`, `data[4 + n]`)
+// use these instead of the `Pixel` view.
+inline std::uint8_t *hm7_byte_row(SDL_Surface *surf, int y) {
+    return static_cast<std::uint8_t *>(surf->pixels) + y * surf->pitch;
+}
+
+inline const std::uint8_t *hm7_byte_row_const(const SDL_Surface *surf, int y) {
+    return static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch;
 }
 
 }  // namespace hm7

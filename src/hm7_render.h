@@ -19,9 +19,9 @@ struct SDL_Surface;
 
 namespace hm7 {
 
-// Parameters array from the Ruby side's @params. See design doc
-// §2.2 for the full mapping. All fields are integers; booleans are
-// 0/1.
+// Parameters array from the Ruby side's @params. The index in each
+// comment is the slot the Ruby array holds it in. All fields are
+// integers, and booleans are 0 or 1.
 struct RenderParams {
     SDL_Surface *screen_bitmap;    // [0] destination render target
     std::int16_t *data_table;      // [1] Table backing from computeM7
@@ -46,7 +46,7 @@ struct RenderParams {
     int y_max_draw;                // [16] clip bottom
 };
 
-// Per-frame vars array from the Ruby side's @vars. Design doc §2.3.
+// Per-frame vars array from the Ruby side's @vars.
 struct RenderVars {
     int height_limit;  // [0] horizon clip
     int display_x;     // [1]
@@ -55,11 +55,12 @@ struct RenderVars {
     int o_scr_y;       // [4] camera Y offset
 };
 
-// One surface (billboard sprite) entry. Design doc §2.4. Fields
-// named after the original's `sPtr[]` indices.
+// One surface (billboard sprite) entry. The fields carry the names
+// of the original's `sPtr[]` indices.
 struct RenderSurface {
-    int type;             // [0] 0 or 1 (controls which lightline channel
-                          //     pair holds the fading lookup)
+    int type;             // [0] 0 or 1. The renderer does not read it:
+                          //     every sprite draws as a billboard, so
+                          //     both types take the depth-scale path.
     int screen_x1;        // [1]
     int screen_y1;        // [2]
     int screen_x2;        // [3]
@@ -103,9 +104,13 @@ enum class WallLayerMode : int {
     BottomCumulative = 1,  // v1.4.4 reference
 };
 
-// Main entry point. Returns `oCamera` — the maximum ody seen at
-// `yt == ysize-1`, used on the Ruby side to auto-adjust the camera
-// Y offset in modes 1/2.
+// Main entry point. Returns `oCamera`, the maximum ody seen at
+// `yt == ysize-1`. The Ruby side uses it to adjust the camera Y
+// offset in modes 1 and 2.
+//
+// `nb_layers` must be in [1, 8]. The renderer keeps its per-layer
+// scratch on the stack, so it draws nothing and returns 0 for a
+// count outside that range.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 763-1767, ~1010 LOC.
 int render_hm7(const RenderParams &p, const RenderVars &v, const RenderSurface *surfaces, int surface_count,

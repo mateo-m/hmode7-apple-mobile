@@ -4,10 +4,10 @@
 // rationale for choosing this as the proof-of-concept function.
 //
 // The public signature takes a raw SDL_Surface* instead of a Ruby
-// VALUE so the math is trivially unit-testable from C++ without
-// needing a running Ruby VM. The Ruby binding glue lives in
-// hm7_bindings.cpp and translates a VALUE Bitmap argument into the
-// underlying surface before calling this.
+// VALUE so the math is testable from C++ without a running Ruby VM.
+// The Ruby glue lives in the host engine, at
+// //mkxp-z-apple-mobile/binding/hmode7-binding.cpp. It unwraps a
+// Bitmap VALUE to the underlying surface before it calls this.
 
 #ifndef HM7_APPLY_OPACITY_H
 #define HM7_APPLY_OPACITY_H
