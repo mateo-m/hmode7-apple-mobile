@@ -53,6 +53,7 @@
 // numbers without caring what channel dominated.
 
 #include "hm7_draw_textureset.h"
+#include "hm7_pixels.h"
 
 #include <SDL_surface.h>
 #include <cstdint>
@@ -60,16 +61,6 @@
 namespace hm7 {
 
 namespace {
-
-// Byte-addressable row pointer. Used throughout so byte indices
-// map 1:1 with the original plugin's byte offsets.
-inline std::uint8_t *byte_row(SDL_Surface *surf, int y) {
-    return static_cast<std::uint8_t *>(surf->pixels) + y * surf->pitch;
-}
-
-inline const std::uint8_t *byte_row_const(const SDL_Surface *surf, int y) {
-    return static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch;
-}
 
 // Bounds-safe row+column accessors that return nullptr on OOB so
 // the copy loops can `if (!ptr) continue;` past bad coords
@@ -80,7 +71,7 @@ inline std::uint8_t *dst_at(SDL_Surface *surf, int row, int col_px) {
         return nullptr;
     if (col_px < 0 || col_px >= surf->w)
         return nullptr;
-    return byte_row(surf, row) + (col_px << 2);
+    return hm7_byte_row(surf, row) + (col_px << 2);
 }
 
 inline const std::uint8_t *src_at(const SDL_Surface *surf, int row, int col_px) {
@@ -88,7 +79,7 @@ inline const std::uint8_t *src_at(const SDL_Surface *surf, int row, int col_px) 
         return nullptr;
     if (col_px < 0 || col_px >= surf->w)
         return nullptr;
-    return byte_row_const(surf, row) + (col_px << 2);
+    return hm7_byte_row_const(surf, row) + (col_px << 2);
 }
 
 }  // namespace

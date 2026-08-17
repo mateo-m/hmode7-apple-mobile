@@ -24,6 +24,7 @@
 // byte indexing against top-down SDL surface rows.
 
 #include "hm7_draw_map_tileset.h"
+#include "hm7_pixels.h"
 
 #include <SDL_surface.h>
 #include <cstdint>
@@ -32,13 +33,6 @@
 namespace hm7 {
 
 namespace {
-
-inline std::uint8_t *byte_row(SDL_Surface *surf, int y) {
-    return static_cast<std::uint8_t *>(surf->pixels) + y * surf->pitch;
-}
-inline const std::uint8_t *byte_row_const(const SDL_Surface *surf, int y) {
-    return static_cast<const std::uint8_t *>(surf->pixels) + y * surf->pitch;
-}
 
 // Compute the destination byte pointer in map_tileset for tile
 // sub-pixel (i, j) at tile position (xt, yt), nbBlocks horizontal.
@@ -54,7 +48,7 @@ inline std::uint8_t *map_tileset_ptr(SDL_Surface *atlas, int xt, int yt, int i, 
         return nullptr;
     if (x_off < 0 || x_off >= atlas->pitch)
         return nullptr;
-    return byte_row(atlas, row_y) + x_off;
+    return hm7_byte_row(atlas, row_y) + x_off;
 }
 
 // Source byte pointer into tileset/autotile/heightset bitmaps.
@@ -66,7 +60,7 @@ inline const std::uint8_t *source_ptr(const SDL_Surface *src, int xs, int ys, in
         return nullptr;
     if (x_off < 0 || x_off >= src->pitch)
         return nullptr;
-    return byte_row_const(src, row_y) + x_off;
+    return hm7_byte_row_const(src, row_y) + x_off;
 }
 
 }  // namespace

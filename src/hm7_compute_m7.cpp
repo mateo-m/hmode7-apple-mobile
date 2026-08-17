@@ -104,7 +104,7 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
 
     for (int yt = y0; yt < yMax; ++yt) {
         const int yt_rel = yt - params.pivot;
-        const int denom = val_4 + yt_rel * params.sinAngle >> 12;
+        const int denom = (val_4 + yt_rel * params.sinAngle) >> 12;
         const int yp = (divise(params.altitude * yt_rel, denom) * params.zoom >> 12) + params.pivot;
         const int ys = yp;
         const int val_1 = params.slope * yt + params.correction;

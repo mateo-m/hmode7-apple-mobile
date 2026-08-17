@@ -32,7 +32,8 @@ namespace hm7 {
 // `pattern`: the small heightpattern bitmap (typically 32x32).
 // `tilemap_xsize`, `tilemap_ysize`: tilemap Table dimensions.
 // `raw_xsize`: heightmap stored xsize (2 × map_width_px).
-// `nb_layers`: hardcoded to 3 per design doc §10.1.
+// `nb_layers`: always 3. An RPG Maker XP map holds exactly 3 tile
+// layers, so the binding passes that count for every game.
 //
 // Original: MGC_Hmode7_1_4_4.cpp lines 257-339, ~83 LOC.
 int draw_heightmap(std::int16_t *heightmap, int raw_xsize, std::int16_t *tilemap_data, int tilemap_xsize,
