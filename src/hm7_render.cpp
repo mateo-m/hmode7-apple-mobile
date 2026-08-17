@@ -161,9 +161,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
     int sNext = surface_count > 0 ? 1 : 0;
 
     // Current surface state (assigned when sNext transitions to a
-    // new surface record). `RenderSurface::type` stays unread: the
-    // port draws every sprite as a billboard, so both types take the
-    // depth-scale path documented in the surface pass below.
+    // new surface record).
     int sScreenX1 = 0, sScreenY1 = 0, sScreenX2 = 0, sScreenY2 = 0;
     int sInverse = 0;
     SDL_Surface *sBitmap = nullptr;
@@ -340,6 +338,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 // billboards, and it matches what players see on
                 // Windows: sprites stay full height at every alpha
                 // and only rotate with theta.
+                //
+                // This is where the port leaves the reference. The
+                // original picked the pair by surface type, at
+                // `sFYt = (sLightlineData[type] << 8) + ...`
+                // (MGC_Hmode7_1_4_4.cpp:1073 and :1455), and always
+                // took the slant pair for `sFYth`. This port takes
+                // the depth pair for both, whatever the type is, so
+                // it drops the type from `RenderSurface`. Restoring
+                // type-dependent scaling means adding the field back
+                // and bringing back the squashed sprites.
                 const int depthZoom = read_u16(reliefRow + ((yt - sH0) << 2) + 2);
                 sFYt = depthZoom;
                 sFYth = depthZoom;

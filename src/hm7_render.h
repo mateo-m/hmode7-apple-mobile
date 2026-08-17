@@ -57,10 +57,11 @@ struct RenderVars {
 
 // One surface (billboard sprite) entry. The fields carry the names
 // of the original's `sPtr[]` indices.
+// Slot [0] of the Ruby array is the surface type. This port does not
+// carry it, because it draws every sprite as a billboard and so takes
+// the depth-scale path for both types. See the billboard note in
+// hm7_render.cpp for why.
 struct RenderSurface {
-    int type;             // [0] 0 or 1. The renderer does not read it:
-                          //     every sprite draws as a billboard, so
-                          //     both types take the depth-scale path.
     int screen_x1;        // [1]
     int screen_y1;        // [2]
     int screen_x2;        // [3]
