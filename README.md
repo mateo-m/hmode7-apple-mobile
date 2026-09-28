@@ -37,7 +37,7 @@ Complete. Output verified against the public V1.4.4 source for all nine exports 
 
 ## Integration
 
-This port ships as part of [mkxp-z-apple-mobile](https://github.com/mateo-m/mkxp-z-apple-mobile), the engine behind [Empo](https://github.com/mateo-m/empo-app). The engine consumes it as a git submodule. At engine init the Ruby binding registers `HM7::Native`, and a postload shim sets `HM7::Native::WALL_LAYER_MODE` based on the DLL era it detects.
+This port ships as part of [mkxp-z-apple-mobile](https://github.com/mateo-m/mkxp-z-apple-mobile). The engine consumes it as a git submodule. At engine init the Ruby binding registers `HM7::Native`, and a postload shim sets `HM7::Native::WALL_LAYER_MODE` based on the DLL era it detects.
 
 Adapting to another mkxp-z-based engine takes a small build-system change. The `.cpp` files compile against the engine's binding layer; no platform-specific code.
 
