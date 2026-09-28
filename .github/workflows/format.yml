@@ -24,7 +24,7 @@ jobs:
           clangFormatVersion: 18
 
   # Aggregate gate whose check-run name matches the ruleset's required
-  # "Format" context exactly (same pattern as empo-app's workflows).
+  # "Format" context exactly.
   summary:
     name: Format
     needs: [cpp]
