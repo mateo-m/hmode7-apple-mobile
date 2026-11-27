@@ -35,6 +35,7 @@
 
 #include <SDL_surface.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
@@ -124,6 +125,14 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
     int y0 = params.heightLimit;
     if (y0 < params.yMin)
         y0 = params.yMin;
+
+    // The loop writes only the rows from y0 down. The game reads the
+    // zoom of any row, and the renderer can start above y0, so the
+    // rows of an earlier camera must not stay.
+    std::memset(reliefRowBytes, 0, static_cast<std::size_t>(lightline->w) * 4);
+    const std::size_t hidden = static_cast<std::size_t>(std::min(y0, yMax)) * xsize;
+    std::memset(data_table, 0, hidden * sizeof(*data_table));
+    std::memset(data_table + oz, 0, hidden * sizeof(*data_table));
 
     for (int yt = y0; yt < yMax; ++yt) {
         const int yt_rel = sub(yt, params.pivot);

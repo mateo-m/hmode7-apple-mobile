@@ -1079,6 +1079,68 @@ void test_sprite_start_columns() {
     ctx_destroy(ctx);
 }
 
+// Each frame of a used context matches the same frame of a new context,
+// also after a hidden projection. The screen buffer holds the last frame,
+// as it does in the game.
+void test_frames_without_history() {
+    const int sprite = image(8, 16, kBlue);
+    struct Step {
+        const char *name;
+        double alpha;
+        int compute_limit;
+        int render_limit;
+        std::vector<std::int32_t> surfaces;
+    } steps[] = {
+        {"a camera from above", 0, -1, -1, {0, 320, 300, sprite, 0, 0}},
+        {"a slanted camera", 60, -1, -1, {}},
+        {"a hidden projection", 60, kScreenH, kScreenH, {}},
+        {"a camera from above after a hidden projection", 0, -1, -1, {}},
+        {"a horizon lower in compute than in render", 0, 200, 100, {0, 320, 300, sprite, 0, 0}},
+        {"a hidden projection after a camera from above", 0, kScreenH, kScreenH, {}},
+    };
+    const int used = build_map();
+    std::vector<std::uint8_t> last(static_cast<std::size_t>(kScreenW) * kScreenH * 4, 0x5a);
+    for (const Step &step : steps) {
+        std::vector<std::int32_t> p = parameters(step.alpha);
+        if (step.compute_limit >= 0)
+            p[6] = step.compute_limit;
+        const int render_limit = step.render_limit >= 0 ? step.render_limit : p[6];
+        const std::size_t n = step.surfaces.size() / 6;
+        const std::int32_t *surfaces = step.surfaces.empty() ? nullptr : step.surfaces.data();
+
+        const int fresh = build_map();
+        std::vector<std::uint8_t> fresh_buf = last;
+        std::vector<std::uint8_t> used_buf = last;
+        for (int ctx : {fresh, used}) {
+            check_equal(0, compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1),
+                        std::string("compute for ") + step.name);
+            std::vector<std::uint8_t> &buf = ctx == fresh ? fresh_buf : used_buf;
+            const int ret = render(ctx, buf.data(), buf.size(), static_cast<long>(buf.size()), render_limit,
+                                   0, 0, 0, 0, surfaces, step.surfaces.size() * 4, static_cast<int>(n));
+            check(ret >= 0, std::string(step.name) + ": " + last_error());
+        }
+        int rows = 0;
+        for (int y = 0; y < kScreenH; ++y)
+            rows += std::memcmp(&fresh_buf[static_cast<std::size_t>(y) * kScreenW * 4],
+                                &used_buf[static_cast<std::size_t>(y) * kScreenW * 4], kScreenW * 4) != 0;
+        check_equal(0, rows, std::string("rows that differ from a new context for ") + step.name);
+        int zooms = 0;
+        for (int y = 0; y < kScreenH; ++y)
+            zooms += row_zoom(fresh, y) != row_zoom(used, y);
+        check_equal(0, zooms, std::string("row zooms that differ from a new context for ") + step.name);
+        if (render_limit >= kScreenH) {
+            int shown = 0;
+            for (std::size_t i = 3; i < used_buf.size(); i += 4)
+                shown += used_buf[i] != 0;
+            check_equal(0, shown, std::string("pixels left on the screen by ") + step.name);
+        }
+        last = used_buf;
+        ctx_destroy(fresh);
+    }
+    ctx_destroy(used);
+    image_free(sprite);
+}
+
 void test_out_of_memory() {
     const std::vector<std::uint8_t> px = pixels(64, 64, kRed);
     const int img = image_create(px.data(), px.size(), 64, 64);
@@ -1132,6 +1194,7 @@ int main() {
     test_sprite_width();
     test_sprite_past_the_map_edge_rows();
     test_sprite_start_columns();
+    test_frames_without_history();
     test_autotile_animation();
     test_heights_and_walls();
     test_out_of_memory();

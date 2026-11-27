@@ -530,11 +530,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         }
     };
 
+    // The first row writes this value, and the final pass reads it. A
+    // hidden projection has no first row, so it read the rows of an
+    // earlier frame and left their ground on the screen.
+    for (int xt = xMin; xt < xMax; ++xt)
+        write_u16(ymRow + (xt << 2), ysize + oScrY);
+
     // Outer y loop: bottom-to-top of the draw range.
     for (int yt = yMax - 1; yt >= y0; --yt) {
         const int rYt = yt + oScrY;
 
-        // Read per-row lighting from lightline row 2 (lux values).
         std::uint8_t *lux_px = lightLightRow + (yt << 2);
         const int lux_b = lux_px[0];
         const int lux_g = lux_px[1];
@@ -566,15 +571,8 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         //  COLUMN LOOP
         // --------------------------------
         for (int xt = xMin + x0; xt < xMax; xt += step) {
-            // Lightline row 0 = per-column ym tracking.
             std::uint8_t *ylp = ymRow + (xt << 2);
-            int ym;
-            if (yt == yMax - 1) {
-                ym = ysize + oScrY;
-                write_u16(ylp, ym);
-            } else {
-                ym = read_u16(ylp);
-            }
+            const int ym = read_u16(ylp);
 
             // Surface pass for each surface that starts on this column. The
             // original runs it after the off-map checks, so a surface that
