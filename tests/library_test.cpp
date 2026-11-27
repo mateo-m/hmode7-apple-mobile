@@ -168,6 +168,7 @@ struct View {
     int h = kScreenH;
     int filter = 0;
     int display_x = 0;
+    int o_scr_y = 0;
 };
 
 Frame run_render(int ctx, double alpha, const std::vector<std::int32_t> &surfaces, const View &v,
@@ -176,7 +177,7 @@ Frame run_render(int ctx, double alpha, const std::vector<std::int32_t> &surface
     const int n = static_cast<int>(surfaces.size() / 6);
     f.ret =
         render(ctx, f.buf.data(), f.buf.size(), static_cast<long>(f.buf.size()), height_limit, v.display_x, 0,
-               v.filter, 0, surfaces.empty() ? nullptr : surfaces.data(), surfaces.size() * 4, n);
+               v.filter, v.o_scr_y, surfaces.empty() ? nullptr : surfaces.data(), surfaces.size() * 4, n);
     return f;
 }
 
@@ -779,15 +780,19 @@ void test_sprite_ranges() {
     check_equal(0, blue_rows(narrow, 0, kScreenH + 7, v, 32),
                 "blue rows of a sprite foot 8 rows below the screen");
     // Far below the screen, the estimated zoom of a slanted camera
-    // overflowed the int math of the original.
+    // overflowed the int math of the original, and so did the camera
+    // offset added to the foot row.
     const int tall_sprite = image(16, 4096, kBlue);
-    for (int alpha : {1, 60}) {
+    for (int alpha : {0, 1, 60}) {
         run_compute(narrow, alpha);
-        for (int y : {kScreenH, kScreenH + 100000, 1 << 30, INT32_MAX}) {
-            blue_rows(narrow, alpha, y, v, 32);
-            const Frame f = run_render(narrow, alpha, {0, 32, y, tall_sprite, INT16_MAX, 0}, v);
-            check(f.ret >= 0,
-                  "a tall high sprite foot at screen y " + std::to_string(y) + ": " + last_error());
+        for (int offset : {0, 1}) {
+            v.o_scr_y = offset;
+            for (int y : {kScreenH, kScreenH + 100000, 1 << 30, INT32_MAX}) {
+                blue_rows(narrow, alpha, y, v, 32);
+                const Frame f = run_render(narrow, alpha, {0, 32, y, tall_sprite, INT16_MAX, 0}, v);
+                check(f.ret >= 0,
+                      "a tall high sprite foot at screen y " + std::to_string(y) + ": " + last_error());
+            }
         }
     }
     image_free(tall_sprite);

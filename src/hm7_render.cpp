@@ -303,7 +303,8 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 dx2 = ((sScreenX2 - 1 - sXt) << 12) / sC2;
             }
             sH0 = sH0 - (sScreenY1 - yt);
-            if (rYt - sH0 < yMin)
+            // A foot far below the screen makes sH0 close to INT_MIN.
+            if (static_cast<long long>(rYt) - sH0 < yMin)
                 continue;
             if (!(dx1 + dx2))
                 continue;
