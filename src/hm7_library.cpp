@@ -190,8 +190,10 @@ int image_create(const void *rgba, std::size_t len, int w, int h) {
     return guarded("image_create: out of memory", [&] {
         if (!valid_size(w, h))
             return fail("image_create: bad size");
-        if (!rgba || len < rgba_bytes(w, h))
+        if (!rgba)
             return fail("image_create: null pixels");
+        if (len < rgba_bytes(w, h))
+            return fail("image_create: pixel buffer too small");
         Surface image = new_surface(w, h);
         if (!image)
             return fail("image_create: out of memory");
@@ -207,8 +209,10 @@ int image_update(int image, const void *rgba, std::size_t len, int w, int h, int
         return fail("image_update: unknown image");
     if (!valid_size(w, h))
         return fail("image_update: bad size");
-    if (!rgba || len < rgba_bytes(w, h))
+    if (!rgba)
         return fail("image_update: null pixels");
+    if (len < rgba_bytes(w, h))
+        return fail("image_update: pixel buffer too small");
     if (it->second->w != w || it->second->h != h) {
         Surface resized = new_surface(w, h);
         if (!resized)
@@ -268,8 +272,8 @@ int set_option(int ctx, int option, int value) {
         return fail("set_option: unknown context");
     if (option != kOptSurfaceZoomField)
         return fail("set_option: unknown option");
-    if (value != 0 && value != 2)
-        return fail("set_option: surface_zoom_field must be 0 or 2");
+    if (value != 2)
+        return fail("set_option: surface_zoom_field must be 2");
     return 0;
 }
 
@@ -343,7 +347,7 @@ int map_set_tiletable(int ctx_id, const void *cells, std::size_t len, int xs, in
         return fail("map_set_tiletable: expected map_w*4 x map_h");
     const std::size_t count = static_cast<std::size_t>(xs) * ys;
     if (len != count * 2)
-        return fail("tiletable size mismatch");
+        return fail("map_set_tiletable: tiletable size mismatch");
 
     return guarded("map_set_tiletable: out of memory", [&] {
         std::vector<std::int16_t> table(count);
@@ -372,8 +376,14 @@ int map_set_combos(int ctx_id, const void *records, std::size_t len, int n) {
             entry.tile_num = packed_int(records, base);
             if (entry.tile_num < 0)
                 return fail("map_set_combos: negative combo index");
-            for (int layer = 0; layer < kPackedStride; ++layer)
-                entry.layer_tile_values[layer] = packed_int(records, base + 1 + layer);
+            // The layer values come from the int16 tile table of the
+            // map, and the bush value is 0 to 3.
+            for (int layer = 0; layer < kPackedStride; ++layer) {
+                const int value = packed_int(records, base + 1 + layer);
+                if (value < 0 || value > INT16_MAX)
+                    return fail("map_set_combos: tile value out of range");
+                entry.layer_tile_values[layer] = value;
+            }
             combos[entry.tile_num] = entry;
         }
         ctx->combos = std::move(combos);
@@ -462,10 +472,19 @@ int map_build(int ctx_id, int tiles_count, int basic_count, int pattern_id, int 
     const int atlas_rows = 1 + (tiles_count >> 3);
     if (!tiletable_fits(ctx->tiletable, atlas_rows))
         return fail("map_build: tile index out of range");
+    for (const auto &combo : ctx->combos) {
+        if ((combo.first >> 3) >= atlas_rows)
+            return fail("map_build: combo index out of range");
+    }
+    const int texture_rows = std::max(basic_count, 1);
+    for (const Texture &texture : ctx->textures) {
+        if (texture.basic_index >= texture_rows)
+            return fail("map_build: texture basic index out of range");
+    }
 
     return guarded("map_build: out of memory", [&] {
         Surface map_tileset = new_surface(512, atlas_rows << 5);
-        Surface textureset = new_surface(160, std::max(basic_count, 1) << 5);
+        Surface textureset = new_surface(160, texture_rows << 5);
         Surface flat_pattern;
         if (!pattern) {
             flat_pattern = new_surface(32, 32);
@@ -517,8 +536,8 @@ int map_animate(int ctx_id, const void *frames_buf, std::size_t len) {
     if (!frames_buf || len < static_cast<std::size_t>(kAutotileSlots) * 4)
         return fail("map_animate: null frames");
 
-    // A frame past the last one draws nothing for that autotile, as a
-    // nil bitmap did in the 1.2 scripts.
+    // The kernel skips an autotile with no sheet, so a frame past the
+    // last one keeps the frame that the atlas has now.
     SDL_Surface *auto_tilesets[kAutotileSlots];
     for (int slot = 0; slot < kAutotileSlots; ++slot) {
         const std::vector<Surface> &frames = ctx->autotile_frames[slot];
@@ -601,14 +620,20 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
             SDL_Surface *image = find_image(image_id);
             if (!image)
                 return fail("render: surface references an unknown image");
+            if (image->w > kMaxRenderSize)
+                return fail("render: surface wider than 4096 px");
             // An upright sprite: both anchor points sit on its foot line.
-            const int screen_x = packed_int(records, base + 1);
+            const long long screen_x = packed_int(records, base + 1);
             const int screen_y = packed_int(records, base + 2);
             const int half = image->w >> 1;
+            // The renderer shifts the column offsets of a sprite by 12
+            // bits, so a sprite far off the screen would overflow them.
+            if (screen_x + half <= 0 || screen_x - half >= ctx->render_w)
+                continue;
             RenderSurface s = {};
-            s.screen_x1 = screen_x - half;
+            s.screen_x1 = static_cast<int>(screen_x - half);
             s.screen_y1 = screen_y;
-            s.screen_x2 = screen_x + half;
+            s.screen_x2 = static_cast<int>(screen_x + half);
             s.screen_y2 = screen_y;
             s.inverse = 0;
             s.bitmap = image;

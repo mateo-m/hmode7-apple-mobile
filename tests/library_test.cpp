@@ -114,13 +114,16 @@ struct Map {
     int map_h = kMapH;
     int render_w = kScreenW;
     int render_h = kScreenH;
+    int loop_x = 0;
     int loop_y = 0;
+    int less_cut = 0;
 };
 
 // A map of tileset tile 384 on every cell: one tiles combination, flat.
 // The calls come in the order of HM7::Tilemap#initialize.
 int build_map(const Map &m) {
-    const int ctx = ctx_create(m.map_w, m.map_h, m.render_w, m.render_h, 0, m.loop_y, 0, 0, 0);
+    const int ctx =
+        ctx_create(m.map_w, m.map_h, m.render_w, m.render_h, m.loop_x, m.loop_y, 0, m.less_cut, 0);
     set_option(ctx, 0, 2);
     const int tileset = image(256, 32, kRed);
     const int heightset = image(256, 32, {0, 0, 0, 0});
@@ -159,13 +162,26 @@ struct Frame {
     }
 };
 
-Frame run_render(int ctx, double alpha, const std::vector<std::int32_t> &surfaces = {}, int w = kScreenW,
-                 int h = kScreenH) {
-    Frame f = {0, w, std::vector<std::uint8_t>(static_cast<std::size_t>(w) * h * 4)};
+struct View {
+    int w = kScreenW;
+    int h = kScreenH;
+    int filter = 0;
+    int display_x = 0;
+};
+
+Frame run_render(int ctx, double alpha, const std::vector<std::int32_t> &surfaces, const View &v,
+                 int height_limit) {
+    Frame f = {0, v.w, std::vector<std::uint8_t>(static_cast<std::size_t>(v.w) * v.h * 4)};
     const int n = static_cast<int>(surfaces.size() / 6);
-    f.ret = render(ctx, f.buf.data(), f.buf.size(), static_cast<long>(f.buf.size()), parameters(alpha)[6], 0,
-                   0, 0, 0, surfaces.empty() ? nullptr : surfaces.data(), surfaces.size() * 4, n);
+    f.ret =
+        render(ctx, f.buf.data(), f.buf.size(), static_cast<long>(f.buf.size()), height_limit, v.display_x, 0,
+               v.filter, 0, surfaces.empty() ? nullptr : surfaces.data(), surfaces.size() * 4, n);
     return f;
+}
+
+Frame run_render(int ctx, double alpha, const std::vector<std::int32_t> &surfaces = {},
+                 const View &v = View()) {
+    return run_render(ctx, alpha, surfaces, v, parameters(alpha)[6]);
 }
 
 // The horizon fade of the game is additive blue (Color.new(0, 0, 255, 1)).
@@ -243,7 +259,10 @@ void test_tall_narrow_screen() {
     m.render_h = 480;
     const int ctx = build_map(m);
     check_equal(0, run_compute(ctx, 0), "compute");
-    const Frame f = run_render(ctx, 0, {}, 64, 480);
+    View v;
+    v.w = 64;
+    v.h = 480;
+    const Frame f = run_render(ctx, 0, {}, v);
     check(f.ret >= 0, std::string("render: ") + last_error());
     check_pixel(kRed, f.at(32, 478), "low row of a 64 x 480 screen");
     check_equal(expected_row_zoom(0, 479, 64), row_zoom(ctx, 479), "row_zoom of row 479");
@@ -342,7 +361,7 @@ void test_bad_input() {
     const std::vector<std::int16_t> table(kMapW * 4 * kMapH, 0);
     check_equal(-1, map_set_tiletable(ctx, table.data(), table.size() * 2 - 2, kMapW * 4, kMapH),
                 "short table");
-    check_error("tiletable size mismatch", "short table");
+    check_error("map_set_tiletable: tiletable size mismatch", "short table");
     check_equal(-1, map_set_tiletable(ctx, table.data(), table.size() * 2, kMapW, kMapH), "narrow table");
     check_error("map_set_tiletable: expected map_w*4 x map_h", "narrow table");
 
@@ -373,8 +392,22 @@ void test_bad_input() {
     check_error("map_set_combos: negative combo index", "negative combo");
     check_equal(-1, map_set_combos(ctx, combo, sizeof combo, 2), "short combos");
     check_error("map_set_combos: bad array", "short combos");
-    check_equal(-1, set_option(ctx, 0, 1), "set_option 1");
-    check_error("set_option: surface_zoom_field must be 0 or 2", "set_option 1");
+    // The game only sends 2, and the renderer has no other mode.
+    for (int value : {0, 1}) {
+        const std::string what = "set_option " + std::to_string(value);
+        check_equal(-1, set_option(ctx, 0, value), what);
+        check_error("set_option: surface_zoom_field must be 2", what);
+    }
+    const std::vector<std::uint8_t> px = pixels(4, 4, kRed);
+    check_equal(-1, image_create(px.data(), px.size() - 1, 4, 4), "image_create with a short buffer");
+    check_error("image_create: pixel buffer too small", "image_create with a short buffer");
+    check_equal(-1, image_create(nullptr, px.size(), 4, 4), "image_create with no pixels");
+    check_error("image_create: null pixels", "image_create with no pixels");
+    const int img = image(4, 4, kRed);
+    check_equal(-1, image_update(img, px.data(), px.size() - 1, 4, 4, 255),
+                "image_update with a short buffer");
+    check_error("image_update: pixel buffer too small", "image_update with a short buffer");
+    image_free(img);
     ctx_destroy(ctx);
 
     const int built = build_map();
@@ -407,6 +440,261 @@ void test_bad_input() {
     check_equal(-1, map_build(unbuilt, 1, 1, 0, 0), "map_build with a far index");
     check_error("map_build: tile index out of range", "map_build with a far index");
     ctx_destroy(unbuilt);
+}
+
+// On a map that loops, a column whose map x is one map width left of
+// the edge must wrap to column 0, not to the column past the last one.
+void test_looping_map() {
+    Map m;
+    m.map_w = 10;
+    m.loop_x = 1;
+    m.loop_y = 1;
+    for (double alpha : {0.0, 60.0}) {
+        const int ctx = build_map(m);
+        run_compute(ctx, alpha);
+        const Frame f = run_render(ctx, alpha);
+        const std::string what = "looping map at " + std::to_string(static_cast<int>(alpha)) + " degrees";
+        check(f.ret >= 0, what + ": " + last_error());
+        for (int x : {0, 320, kScreenW - 1})
+            check_pixel(kRed, f.at(x, kScreenH - 1), what + ", bottom row, column " + std::to_string(x));
+        ctx_destroy(ctx);
+    }
+}
+
+void test_less_cut() {
+    Map m;
+    m.less_cut = 1;
+    const int ctx = build_map(m);
+    check_equal(0, run_compute(ctx, 0), "compute with less_cut");
+    const Frame f = run_render(ctx, 0);
+    check(f.ret >= 0, std::string("render with less_cut: ") + last_error());
+    for (int y : {kPivot, 300, kScreenH - 2})
+        check_pixel(kRed, f.at(320, y), "less_cut map under the pivot, row " + std::to_string(y));
+    ctx_destroy(ctx);
+}
+
+// A sprite that the column pass never reaches must not hold back the
+// sprites after it in the list.
+void test_sprite_out_of_reach() {
+    const int sprite = image(8, 8, kBlue);
+    struct Case {
+        const char *name;
+        int map_w;
+        int filter;
+        int x;
+    } cases[] = {
+        // With filter 1 the column pass draws even columns only, and
+        // this sprite starts on column 639.
+        {"a sprite on the last odd column", kMapW, 1, kScreenW},
+        // The map covers columns 0 to 319, and the sprite is over the
+        // space right of it.
+        {"a sprite past the map edge", 10, 0, 480},
+    };
+    for (const Case &c : cases) {
+        Map m;
+        m.map_w = c.map_w;
+        const int ctx = build_map(m);
+        run_compute(ctx, 0);
+        const int narrow = image(2, 8, kBlue);
+        const int first = c.filter ? narrow : sprite;
+        View v;
+        v.filter = c.filter;
+        const Frame f = run_render(ctx, 0, {0, c.x, 300, first, 0, 0, 0, 160, 280, sprite, 0, 0}, v);
+        check(f.ret >= 0, std::string(c.name) + ": " + last_error());
+        check_pixel(kBlue, f.at(160, 276), std::string("the next sprite after ") + c.name);
+        image_free(narrow);
+        ctx_destroy(ctx);
+    }
+    image_free(sprite);
+}
+
+// A horizon on the last row leaves one row of zoom data, and a sprite
+// foot under the screen scales from it.
+void test_horizon_on_last_row() {
+    const int ctx = build_map();
+    run_compute(ctx, 0);
+    const int sprite = image(8, 48, kBlue);
+    const Frame f = run_render(ctx, 0, {0, 320, kScreenH + 10, sprite, 0, 0}, View(), kScreenH - 1);
+    check(f.ret >= 0, std::string("render with the horizon on the last row: ") + last_error());
+    image_free(sprite);
+    ctx_destroy(ctx);
+}
+
+void test_far_and_wide_sprites() {
+    const int ctx = build_map();
+    // On the top row the sprite columns scale by a large factor.
+    run_compute(ctx, 0);
+    const int top = image(1024, 4, kBlue);
+    check(run_render(ctx, 0, {0, 320, 0, top, 0, 0}).ret >= 0,
+          std::string("a 1024 px sprite on the top row: ") + last_error());
+    image_free(top);
+
+    run_compute(ctx, 60);
+    const int sprite = image(8, 8, kBlue);
+    for (int x : {INT32_MAX, INT32_MIN, -100000, 100000}) {
+        const Frame f = run_render(ctx, 60, {0, x, 300, sprite, 0, 0});
+        check(f.ret >= 0, "a sprite at screen x " + std::to_string(x) + ": " + last_error());
+    }
+    const int wide = image(4096, 2, kBlue);
+    const Frame f = run_render(ctx, 60, {0, 320, kScreenH - 1, wide, 0, 0});
+    check(f.ret >= 0, std::string("a 4096 px sprite: ") + last_error());
+    check_pixel(kBlue, f.at(320, kScreenH - 2), "a 4096 px sprite");
+    const int too_wide = image(4098, 2, kBlue);
+    check_equal(-1, run_render(ctx, 60, {0, 320, 300, too_wide, 0, 0}).ret, "a 4098 px sprite");
+    check_error("render: surface wider than 4096 px", "a 4098 px sprite");
+    image_free(too_wide);
+    image_free(wide);
+    image_free(sprite);
+    ctx_destroy(ctx);
+}
+
+// The game makes combination keys from 0 up, texture indexes below
+// its basic tile count, and tile values from the int16 map table.
+void test_out_of_range_tiles() {
+    const std::vector<std::int16_t> table(kMapW * 4 * kMapH, 0);
+    const int tileset = image(256, 32, kRed);
+    const int texture = image(160, 32, kBlue);
+    auto unbuilt = [&]() {
+        const int ctx = ctx_create(kMapW, kMapH, kScreenW, kScreenH, 0, 0, 0, 0, 0);
+        map_set_tileset(ctx, tileset, tileset);
+        map_set_tiletable(ctx, table.data(), table.size() * 2, kMapW * 4, kMapH);
+        return ctx;
+    };
+
+    int ctx = unbuilt();
+    const std::int32_t far_key[] = {0, 384, 0, 0, 1, INT32_MAX, 384, 0, 0, 1};
+    check_equal(0, map_set_combos(ctx, far_key, sizeof far_key, 2), "map_set_combos with a far key");
+    check_equal(-1, map_build(ctx, 1, 1, 0, 0), "map_build with a far key");
+    check_error("map_build: combo index out of range", "map_build with a far key");
+    ctx_destroy(ctx);
+
+    ctx = unbuilt();
+    for (std::int32_t value : {INT32_MAX, 32768, -1}) {
+        const std::int32_t combo[] = {0, value, 0, 0, 1};
+        const std::string what = "map_set_combos with tile value " + std::to_string(value);
+        check_equal(-1, map_set_combos(ctx, combo, sizeof combo, 1), what);
+        check_error("map_set_combos: tile value out of range", what);
+    }
+    ctx_destroy(ctx);
+
+    ctx = unbuilt();
+    const std::int32_t combo[] = {0, 384, 0, 0, 1};
+    map_set_combos(ctx, combo, sizeof combo, 1);
+    check_equal(0, map_add_texture(ctx, INT32_MAX, 384, texture), "map_add_texture with a far index");
+    check_equal(-1, map_build(ctx, 1, 1, 0, 0), "map_build with a far texture index");
+    check_error("map_build: texture basic index out of range", "map_build with a far texture index");
+    ctx_destroy(ctx);
+
+    image_free(tileset);
+    image_free(texture);
+}
+
+constexpr Rgba kGreen = {0, 255, 0, 255};
+
+// Autotile slot 0 has a blue frame and a green frame. Tile value 48 is
+// the first tile of that slot.
+void test_autotile_animation() {
+    const int ctx = ctx_create(kMapW, kMapH, kScreenW, kScreenH, 0, 0, 0, 0, 0);
+    set_option(ctx, 0, 2);
+    const int tileset = image(256, 32, kRed);
+    map_set_tileset(ctx, tileset, tileset);
+    const int blue = image(256, 192, kBlue);
+    const int green = image(256, 192, kGreen);
+    check_equal(0, map_set_autotile(ctx, 0, 0, blue, 0), "map_set_autotile frame 0");
+    check_equal(0, map_set_autotile(ctx, 0, 1, green, 0), "map_set_autotile frame 1");
+    const std::vector<std::int16_t> table(kMapW * 4 * kMapH, 0);
+    map_set_tiletable(ctx, table.data(), table.size() * 2, kMapW * 4, kMapH);
+    const std::int32_t combo[] = {0, 48, 0, 0, 1};
+    map_set_combos(ctx, combo, sizeof combo, 1);
+    const std::int32_t animated[] = {0};
+    map_set_animated(ctx, animated, sizeof animated, 1);
+    check_equal(0, map_build(ctx, 1, 1, 0, 0), std::string("map_build: ") + last_error());
+    run_compute(ctx, 0);
+    check_pixel(kBlue, run_render(ctx, 0).at(320, 300), "autotile frame 0");
+
+    const struct {
+        std::int32_t frame;
+        Rgba color;
+        const char *what;
+    } steps[] = {
+        {1, kGreen, "autotile frame 1"},
+        {0, kBlue, "autotile frame 0 again"},
+        // The kernel skips a frame past the last one, so the atlas keeps
+        // the frame that it has.
+        {7, kBlue, "autotile frame past the last one"},
+    };
+    for (const auto &step : steps) {
+        const std::int32_t frames[] = {step.frame, 0, 0, 0, 0, 0, 0};
+        check_equal(0, map_animate(ctx, frames, sizeof frames), step.what);
+        check_pixel(step.color, run_render(ctx, 0).at(320, 300), step.what);
+    }
+    image_free(tileset);
+    image_free(blue);
+    image_free(green);
+    ctx_destroy(ctx);
+}
+
+// A raised block in the middle of a flat map: combination 1 is tileset
+// tile 385, whose heightset value lifts it.
+int build_block_map(int lighting, int texture) {
+    const int ctx = ctx_create(kMapW, kMapH, kScreenW, kScreenH, 0, 0, 0, 0, 0);
+    set_option(ctx, 0, 2);
+    std::vector<std::uint8_t> tiles = pixels(256, 32, kRed);
+    std::vector<std::uint8_t> heights = pixels(256, 32, {0, 0, 0, 0});
+    for (int y = 0; y < 32; ++y) {
+        for (int x = 32; x < 64; ++x) {
+            std::uint8_t *h = &heights[(static_cast<std::size_t>(y) * 256 + x) * 4];
+            h[0] = 64;
+            h[3] = 255;
+        }
+    }
+    const int tileset = image_create(tiles.data(), tiles.size(), 256, 32);
+    const int heightset = image_create(heights.data(), heights.size(), 256, 32);
+    map_set_tileset(ctx, tileset, heightset);
+    image_free(tileset);
+    image_free(heightset);
+    std::vector<std::int16_t> table(kMapW * 4 * kMapH, 0);
+    table[7 * kMapW * 4 + 10 * 4] = 1;
+    map_set_tiletable(ctx, table.data(), table.size() * 2, kMapW * 4, kMapH);
+    const std::int32_t combos[] = {0, 384, 0, 0, 1, 1, 385, 0, 0, 1};
+    map_set_combos(ctx, combos, sizeof combos, 2);
+    map_set_animated(ctx, nullptr, 0, 0);
+    check_equal(0, map_add_texture(ctx, 0, 385, texture), "map_add_texture");
+    check_equal(0, map_build(ctx, 2, 1, 0, lighting), std::string("map_build: ") + last_error());
+    return ctx;
+}
+
+void test_heights_and_walls() {
+    const int texture = image(160, 32, kGreen);
+    const int lit = build_block_map(1, texture);
+    const int unlit = build_block_map(0, texture);
+    image_free(texture);
+
+    // The heightmap has 2 values for each map pixel: the height, then
+    // the shadow that the lighting adds.
+    const int block_x = (10 * 32 + 16) * 2;
+    const int block_y = 7 * 32 + 16;
+    check(heightmap_get(lit, block_x, block_y) > 0,
+          "height on the block: " + std::to_string(heightmap_get(lit, block_x, block_y)));
+    check_equal(0, heightmap_get(lit, 2 * 2, 2), "height away from the block");
+    int lit_shadows = 0;
+    int unlit_shadows = 0;
+    for (int x = 0; x < kMapW * 32; ++x) {
+        lit_shadows += heightmap_get(lit, x * 2 + 1, block_y) != 0;
+        unlit_shadows += heightmap_get(unlit, x * 2 + 1, block_y) != 0;
+    }
+    check(lit_shadows > 0, "shadow values on the block row with lighting");
+    check_equal(0, unlit_shadows, "shadow values on the block row without lighting");
+
+    run_compute(lit, 60);
+    const Frame f = run_render(lit, 60);
+    check(f.ret >= 0, std::string("render of the block: ") + last_error());
+    int wall = 0;
+    for (std::size_t i = 0; i < f.buf.size(); i += 4)
+        wall += f.buf[i] == 0 && f.buf[i + 1] == 255 && f.buf[i + 2] == 0;
+    check(wall > 0, "the wall of the block shows its texture");
+    ctx_destroy(lit);
+    ctx_destroy(unlit);
 }
 
 // SDL takes its allocations from these, so a test can make the large
@@ -469,6 +757,14 @@ int main() {
     test_setters_after_build();
     test_unknown_ids();
     test_bad_input();
+    test_looping_map();
+    test_less_cut();
+    test_sprite_out_of_reach();
+    test_horizon_on_last_row();
+    test_far_and_wide_sprites();
+    test_out_of_range_tiles();
+    test_autotile_animation();
+    test_heights_and_walls();
     test_out_of_memory();
 
     std::printf("library_test: %d of %d checks passed\n", g_checks - g_failures, g_checks);
