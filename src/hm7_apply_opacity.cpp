@@ -15,7 +15,7 @@
 //   3. The Ruby side calls it exactly once per surface-sprite per
 //      frame (210-HM7_NEW_CLASSES.rb's Surface#get_data pipeline),
 //      so we'll know immediately if it's plumbed wrong during the
-//      Insurgence intro.
+//      first scene that uses it.
 
 #include "hm7_apply_opacity.h"
 #include "hm7_pixels.h"

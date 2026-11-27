@@ -25,6 +25,7 @@
 #include "hm7_pixels.h"
 
 #include <SDL_surface.h>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
@@ -207,6 +208,17 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         y0 = heightLimit;
     else
         y0 = yMin;
+    const int rowSpan = std::max(yMax - 1 - y0, 1);
+    // The zoom of a row below the zoom rows, on the line through them. The
+    // original did this in int, which overflowed far below the screen.
+    // Such a zoom has no upper limit, so a column of the sprite is skipped
+    // when it is taller, or rises or drops further, than kMaxSpriteRows.
+    constexpr int kMaxSpriteRows = 1 << 24;
+    auto estimate_zoom = [&](int base, int slope, int dy) {
+        const long long zoom = base + static_cast<long long>(slope) * dy / rowSpan;
+        return static_cast<int>(
+            std::min(std::max(zoom, static_cast<long long>(INT_MIN)), static_cast<long long>(INT_MAX)));
+    };
 
     // Lightline rows, laid out top-down to match the Ruby side
     // which writes the seed fade color via `set_pixel(0, 0, ...)`
@@ -260,16 +272,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
 
         int sC1, sC2;
         if (sScreenY1 >= yMax) {
-            sC1 = sCmin + (sCsl * (sScreenY1 - y0)) / (yMax - 1 - y0);
+            sC1 = estimate_zoom(sCmin, sCsl, sScreenY1 - y0);
             if (sScreenY2 < 0 || sScreenY2 >= yMax) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / (yMax - 1 - y0);
+                sC2 = estimate_zoom(sCmin, sCsl, sScreenY2 - y0);
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
         } else {
             sC1 = read_u16(reliefRow + (sScreenY1 << 2));
             if (sScreenY2 < 0) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / (yMax - 1 - y0);
+                sC2 = estimate_zoom(sCmin, sCsl, sScreenY2 - y0);
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
@@ -291,17 +303,14 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 dx2 = ((sScreenX2 - 1 - sXt) << 12) / sC2;
             }
             sH0 = sH0 - (sScreenY1 - yt);
-            if (rYt - sH0 < yMin)
+            // A foot far below the screen makes sH0 close to INT_MIN.
+            if (static_cast<long long>(rYt) - sH0 < yMin)
                 continue;
             if (!(dx1 + dx2))
                 continue;
 
-            int sX;
-            if (sInverse) {
-                sX = (sDispOffset + (sDispWidth * dx2) / (dx1 + dx2)) << 2;
-            } else {
-                sX = (sDispOffset + (sDispWidth * dx1) / (dx1 + dx2)) << 2;
-            }
+            const long long dxNear = sInverse ? dx2 : dx1;
+            const int sX = (sDispOffset + static_cast<int>(sDispWidth * dxNear / (dx1 + dx2))) << 2;
             if (sX < 0 || sX >= sRowSize)
                 continue;
 
@@ -311,7 +320,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 // Above the lightline rows, so scale from the row
                 // range. Billboards use depth scale (HT2) whatever
                 // the surface type is. The else branch explains why.
-                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
+                sFYt = estimate_zoom(sCminHT2, sCslHT2, yt - sH0 - y0);
                 sFYth = sFYt;
                 sHbase = 0;
             } else {
@@ -354,11 +363,17 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 sHbase = sH0;
             }
 
-            sH0 += (sDh * sFYth) >> 15;
+            const long long rise = sH0 + ((static_cast<long long>(sDh) * sFYth) >> 15);
+            if (rise < -kMaxSpriteRows || rise > kMaxSpriteRows)
+                continue;
+            sH0 = static_cast<int>(rise);
             const int sHend = (sH0 < 0) ? 0 : sH0;
             if (rYt - sH0 < yMin)
                 continue;
-            const int sRealHeight = (sHeight * sFYt) >> 12;
+            const long long realHeight = (static_cast<long long>(sHeight) * sFYt) >> 12;
+            if (realHeight > kMaxSpriteRows)
+                continue;
+            const int sRealHeight = static_cast<int>(realHeight);
             if (sRealHeight < 2)
                 continue;
 
@@ -508,6 +523,21 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         }
     };
 
+    // The start column of the current surface, clipped to the visible
+    // range. With `snap`, it moves to the parity of x0. The first row pass
+    // of the original snaps also with filter 0, where step is 1.
+    auto surface_start_column = [&](bool snap) {
+        int sXmin = sScreenX1;
+        if (snap && (sScreenX1 & 1) != x0)
+            ++sXmin;
+        if (sXmin >= xMax) {
+            sXmin = xMax - 1;
+        } else if (sXmin < xMin) {
+            sXmin = xMin + x0;
+        }
+        return sXmin;
+    };
+
     // Step to the next surface in the stream.
     auto advance_surface = [&]() {
         ++sIdx;
@@ -518,11 +548,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         }
     };
 
+    // The first row writes this value, and the final pass reads it. A
+    // hidden projection has no first row, so it read the rows of an
+    // earlier frame and left their ground on the screen.
+    for (int xt = xMin; xt < xMax; ++xt)
+        write_u16(ymRow + (xt << 2), ysize + oScrY);
+
     // Outer y loop: bottom-to-top of the draw range.
     for (int yt = yMax - 1; yt >= y0; --yt) {
         const int rYt = yt + oScrY;
 
-        // Read per-row lighting from lightline row 2 (lux values).
         std::uint8_t *lux_px = lightLightRow + (yt << 2);
         const int lux_b = lux_px[0];
         const int lux_g = lux_px[1];
@@ -544,21 +579,8 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         // --------------------------------
         if (yt == yMax - 1) {
             while (sNext && yt <= sScreenY1) {
-                // Start column, snapped to the parity the filter
-                // draws and clipped to the visible range.
-                int sXmin;
-                if (x0) {
-                    sXmin = (sScreenX1 & 1) ? sScreenX1 : (sScreenX1 + 1);
-                } else {
-                    sXmin = (sScreenX1 & 1) ? (sScreenX1 + 1) : sScreenX1;
-                }
-                if (sXmin >= xMax) {
-                    sXmin = xMax - 1;
-                } else if (sXmin < xMin) {
-                    sXmin = xMin + x0;
-                }
-
-                draw_surface_row(yt, rYt, sXmin, sInitZoomData, /*full_cover_test=*/false);
+                draw_surface_row(yt, rYt, surface_start_column(true), sInitZoomData,
+                                 /*full_cover_test=*/false);
                 advance_surface();
             }
         }
@@ -567,14 +589,19 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         //  COLUMN LOOP
         // --------------------------------
         for (int xt = xMin + x0; xt < xMax; xt += step) {
-            // Lightline row 0 = per-column ym tracking.
             std::uint8_t *ylp = ymRow + (xt << 2);
-            int ym;
-            if (yt == yMax - 1) {
-                ym = ysize + oScrY;
-                write_u16(ylp, ym);
-            } else {
-                ym = read_u16(ylp);
+            const int ym = read_u16(ylp);
+
+            // Surface pass for each surface that starts on this column. The
+            // original runs it after the off-map checks, so a surface that
+            // starts outside the map lost its foot row there. It also starts
+            // one surface per column, so a second one on the same start
+            // column lost its first column.
+            while (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
+                if (xt < sScreenX2) {
+                    draw_surface_row(yt, rYt, xt, sInitZoomData, /*full_cover_test=*/true);
+                }
+                advance_surface();
             }
 
             int xs = pp.data_table[xt + oy] + displayX;
@@ -586,10 +613,9 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                     continue;
                 }
             } else {
-                if (xs >= mapWidthPx)
-                    xs -= mapWidthPx * (xs / mapWidthPx);
-                else if (xs < 0)
-                    xs -= mapWidthPx * (xs / mapWidthPx - 1);
+                xs %= mapWidthPx;
+                if (xs < 0)
+                    xs += mapWidthPx;
             }
 
             if (!loopY) {
@@ -655,14 +681,6 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                     oCamera = ody_cam;
             }
             int ody = rYt - dy;
-
-            // Surface pass for the column that this surface starts on.
-            if (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
-                if (xt < sScreenX2) {
-                    draw_surface_row(yt, rYt, xt, sInitZoomData, /*full_cover_test=*/true);
-                }
-                advance_surface();
-            }
 
             if (ym <= ody)
                 continue;
@@ -854,6 +872,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 std::uint8_t *sS = hm7_byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
                 sS[0] = 0;
             }
+        }
+
+        // The column pass starts a surface only on a column at or right
+        // of its start. A surface right of the last column would wait
+        // there and hold back every surface after it. Start it on the
+        // first column that the column pass would visit.
+        while (sNext && yt <= sScreenY1) {
+            draw_surface_row(yt, rYt, surface_start_column(step == 2), sInitZoomData,
+                             /*full_cover_test=*/true);
+            advance_surface();
         }
     }
 
