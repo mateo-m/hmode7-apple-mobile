@@ -80,8 +80,8 @@ struct RenderSurface {
 // eras disagree on which layer's colormap a wall pixel samples.
 //
 //   `WallLayerMode::TopCumulative`  - matches pre-v1.3 DLLs
-//       (Pokemon Insurgence ships one at MGC_Hmode7.dll, 8 exports,
-//       stamped 2011-05-15). Iterating top-to-bottom, the first
+//       (games ship one as MGC_Hmode7.dll, 8 exports, stamped
+//       2011-05-15). Iterating top-to-bottom, the first
 //       layer whose *own* height exceeds the wall-pixel's depth
 //       from the tile's crown wins. A 3-layer house (ground /
 //       wall / roof) thus surfaces each layer's colormap in its
@@ -95,8 +95,8 @@ struct RenderSurface {
 //       the top layer. Faithful to v1.4.4's code but the
 //       layer-selection loop is effectively degenerate.
 //
-// Default is TopCumulative because Insurgence (and every other
-// pre-v1.3 title) depends on it to render buildings correctly. To
+// Default is TopCumulative because every pre-v1.3 game depends
+// on it to render buildings correctly. To
 // run a game shipping a v1.3+ DLL faithfully, the caller can flip
 // the mode via the Ruby-side HM7::Native::WALL_LAYER_MODE constant
 // which the binding layer forwards as `params.wall_layer_mode`.
