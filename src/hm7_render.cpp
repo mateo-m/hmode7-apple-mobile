@@ -207,6 +207,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         y0 = heightLimit;
     else
         y0 = yMin;
+    const int rowSpan = std::max(yMax - 1 - y0, 1);
 
     // Lightline rows, laid out top-down to match the Ruby side
     // which writes the seed fade color via `set_pixel(0, 0, ...)`
@@ -260,16 +261,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
 
         int sC1, sC2;
         if (sScreenY1 >= yMax) {
-            sC1 = sCmin + (sCsl * (sScreenY1 - y0)) / (yMax - 1 - y0);
+            sC1 = sCmin + (sCsl * (sScreenY1 - y0)) / rowSpan;
             if (sScreenY2 < 0 || sScreenY2 >= yMax) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / (yMax - 1 - y0);
+                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / rowSpan;
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
         } else {
             sC1 = read_u16(reliefRow + (sScreenY1 << 2));
             if (sScreenY2 < 0) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / (yMax - 1 - y0);
+                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / rowSpan;
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
@@ -296,12 +297,8 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
             if (!(dx1 + dx2))
                 continue;
 
-            int sX;
-            if (sInverse) {
-                sX = (sDispOffset + (sDispWidth * dx2) / (dx1 + dx2)) << 2;
-            } else {
-                sX = (sDispOffset + (sDispWidth * dx1) / (dx1 + dx2)) << 2;
-            }
+            const long long dxNear = sInverse ? dx2 : dx1;
+            const int sX = (sDispOffset + static_cast<int>(sDispWidth * dxNear / (dx1 + dx2))) << 2;
             if (sX < 0 || sX >= sRowSize)
                 continue;
 
@@ -311,7 +308,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 // Above the lightline rows, so scale from the row
                 // range. Billboards use depth scale (HT2) whatever
                 // the surface type is. The else branch explains why.
-                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / (yMax - 1 - y0);
+                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / rowSpan;
                 sFYth = sFYt;
                 sHbase = 0;
             } else {
@@ -508,6 +505,23 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         }
     };
 
+    // The start column of the current surface, snapped to the parity
+    // the filter draws and clipped to the visible range.
+    auto surface_start_column = [&]() {
+        int sXmin;
+        if (x0) {
+            sXmin = (sScreenX1 & 1) ? sScreenX1 : (sScreenX1 + 1);
+        } else {
+            sXmin = (sScreenX1 & 1) ? (sScreenX1 + 1) : sScreenX1;
+        }
+        if (sXmin >= xMax) {
+            sXmin = xMax - 1;
+        } else if (sXmin < xMin) {
+            sXmin = xMin + x0;
+        }
+        return sXmin;
+    };
+
     // Step to the next surface in the stream.
     auto advance_surface = [&]() {
         ++sIdx;
@@ -544,21 +558,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         // --------------------------------
         if (yt == yMax - 1) {
             while (sNext && yt <= sScreenY1) {
-                // Start column, snapped to the parity the filter
-                // draws and clipped to the visible range.
-                int sXmin;
-                if (x0) {
-                    sXmin = (sScreenX1 & 1) ? sScreenX1 : (sScreenX1 + 1);
-                } else {
-                    sXmin = (sScreenX1 & 1) ? (sScreenX1 + 1) : sScreenX1;
-                }
-                if (sXmin >= xMax) {
-                    sXmin = xMax - 1;
-                } else if (sXmin < xMin) {
-                    sXmin = xMin + x0;
-                }
-
-                draw_surface_row(yt, rYt, sXmin, sInitZoomData, /*full_cover_test=*/false);
+                draw_surface_row(yt, rYt, surface_start_column(), sInitZoomData, /*full_cover_test=*/false);
                 advance_surface();
             }
         }
@@ -586,10 +586,9 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                     continue;
                 }
             } else {
-                if (xs >= mapWidthPx)
-                    xs -= mapWidthPx * (xs / mapWidthPx);
-                else if (xs < 0)
-                    xs -= mapWidthPx * (xs / mapWidthPx - 1);
+                xs %= mapWidthPx;
+                if (xs < 0)
+                    xs += mapWidthPx;
             }
 
             if (!loopY) {
@@ -854,6 +853,15 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 std::uint8_t *sS = hm7_byte_row(pp.s_screen_bitmap, rYt) + (xt << 3);
                 sS[0] = 0;
             }
+        }
+
+        // The column pass starts a surface only on a map column at or
+        // right of its start. A surface right of the last column or
+        // over the space past the map edge would wait there and hold
+        // back every surface after it.
+        while (sNext && yt <= sScreenY1) {
+            draw_surface_row(yt, rYt, surface_start_column(), sInitZoomData, /*full_cover_test=*/true);
+            advance_surface();
         }
     }
 
