@@ -502,6 +502,19 @@ void test_sprite_out_of_reach() {
         image_free(narrow);
         ctx_destroy(ctx);
     }
+
+    // With filter 0 the column pass draws every column, so a sprite past
+    // the map edge keeps its odd start column.
+    Map m;
+    m.map_w = 10;
+    const int ctx = build_map(m);
+    run_compute(ctx, 0);
+    const Frame f = run_render(ctx, 0, {0, 481, 300, sprite, 0, 0});
+    check(f.ret >= 0, std::string("a sprite on an odd column past the map edge: ") + last_error());
+    check_pixel(kBlue, f.at(477, 297), "the first column of a sprite on an odd column past the map edge");
+    check_pixel(kBlue, f.at(483, 297), "the last column of a sprite on an odd column past the map edge");
+    check(f.at(476, 297).b != 255, "the column left of a sprite on an odd column past the map edge");
+    ctx_destroy(ctx);
     image_free(sprite);
 }
 
@@ -779,6 +792,47 @@ void test_out_of_range_tiles() {
     check_equal(-1, map_build(ctx, 1, 1, 0, 0), "map_build with a far texture index");
     check_error("map_build: texture basic index out of range", "map_build with a far texture index");
     ctx_destroy(ctx);
+
+    // The bush value counts the bush layers from the top, 0 to 3.
+    for (std::int32_t bush : {-1, 4, 256}) {
+        ctx = unbuilt();
+        const std::int32_t bad_bush[] = {0, 384, 0, 0, bush};
+        const std::string what = "map_set_combos with bush value " + std::to_string(bush);
+        check_equal(-1, map_set_combos(ctx, bad_bush, sizeof bad_bush, 1), what);
+        check_error("map_set_combos: bush value out of range", what);
+        ctx_destroy(ctx);
+    }
+    for (std::int32_t bush : {0, 3}) {
+        ctx = unbuilt();
+        const std::int32_t good_bush[] = {0, 384, 0, 0, bush};
+        check_equal(0, map_set_combos(ctx, good_bush, sizeof good_bush, 1),
+                    "map_set_combos with bush value " + std::to_string(bush));
+        ctx_destroy(ctx);
+    }
+
+    // The wall texture of each layer is below the basic tile count.
+    struct WallCase {
+        std::int16_t index;
+        int basic_count;
+        int ret;
+    } wall_cases[] = {{-1, 1, -1}, {1, 1, -1}, {INT16_MAX, 1, -1}, {0, 1, 0}, {1, 2, 0}};
+    for (const WallCase &c : wall_cases) {
+        for (int layer = 1; layer <= 3; ++layer) {
+            std::vector<std::int16_t> walls(table);
+            walls[layer] = c.index;
+            ctx = ctx_create(kMapW, kMapH, kScreenW, kScreenH, 0, 0, 0, 0, 0);
+            map_set_tileset(ctx, tileset, tileset);
+            map_set_tiletable(ctx, walls.data(), walls.size() * 2, kMapW * 4, kMapH);
+            map_set_combos(ctx, combo, sizeof combo, 1);
+            const std::string what = "map_build with wall texture " + std::to_string(c.index) + " on layer " +
+                                     std::to_string(layer) + " and " + std::to_string(c.basic_count) +
+                                     " basic tiles";
+            check_equal(c.ret, map_build(ctx, 1, c.basic_count, 0, 0), what);
+            if (c.ret != 0)
+                check_error("map_build: wall texture index out of range", what);
+            ctx_destroy(ctx);
+        }
+    }
 
     image_free(tileset);
     image_free(texture);

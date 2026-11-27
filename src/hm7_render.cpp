@@ -505,15 +505,13 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         }
     };
 
-    // The start column of the current surface, snapped to the parity
-    // the filter draws and clipped to the visible range.
-    auto surface_start_column = [&]() {
-        int sXmin;
-        if (x0) {
-            sXmin = (sScreenX1 & 1) ? sScreenX1 : (sScreenX1 + 1);
-        } else {
-            sXmin = (sScreenX1 & 1) ? (sScreenX1 + 1) : sScreenX1;
-        }
+    // The start column of the current surface, clipped to the visible
+    // range. With `snap`, it moves to the parity of x0. The first row pass
+    // of the original snaps also with filter 0, where step is 1.
+    auto surface_start_column = [&](bool snap) {
+        int sXmin = sScreenX1;
+        if (snap && (sScreenX1 & 1) != x0)
+            ++sXmin;
         if (sXmin >= xMax) {
             sXmin = xMax - 1;
         } else if (sXmin < xMin) {
@@ -558,7 +556,8 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         // --------------------------------
         if (yt == yMax - 1) {
             while (sNext && yt <= sScreenY1) {
-                draw_surface_row(yt, rYt, surface_start_column(), sInitZoomData, /*full_cover_test=*/false);
+                draw_surface_row(yt, rYt, surface_start_column(true), sInitZoomData,
+                                 /*full_cover_test=*/false);
                 advance_surface();
             }
         }
@@ -858,9 +857,11 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
         // The column pass starts a surface only on a map column at or
         // right of its start. A surface right of the last column or
         // over the space past the map edge would wait there and hold
-        // back every surface after it.
+        // back every surface after it. Start it on the first column that
+        // the column pass would visit.
         while (sNext && yt <= sScreenY1) {
-            draw_surface_row(yt, rYt, surface_start_column(), sInitZoomData, /*full_cover_test=*/true);
+            draw_surface_row(yt, rYt, surface_start_column(step == 2), sInitZoomData,
+                             /*full_cover_test=*/true);
             advance_surface();
         }
     }

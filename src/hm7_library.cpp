@@ -173,6 +173,15 @@ bool tiletable_fits(const std::vector<std::int16_t> &cells, int atlas_rows) {
     return true;
 }
 
+// The other fields of a cell are the wall texture of each layer.
+bool wall_textures_fit(const std::vector<std::int16_t> &cells, int texture_rows) {
+    for (std::size_t i = 0; i < cells.size(); ++i) {
+        if (i % kPackedStride != 0 && (cells[i] < 0 || cells[i] >= texture_rows))
+            return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int abi_version() {
@@ -379,12 +388,16 @@ int map_set_combos(int ctx_id, const void *records, std::size_t len, int n) {
                 return fail("map_set_combos: negative combo index");
             // The layer values come from the int16 tile table of the
             // map, and the bush value is 0 to 3.
-            for (int layer = 0; layer < kPackedStride; ++layer) {
+            for (int layer = 0; layer < kMapLayers; ++layer) {
                 const int value = packed_int(records, base + 1 + layer);
                 if (value < 0 || value > INT16_MAX)
                     return fail("map_set_combos: tile value out of range");
                 entry.layer_tile_values[layer] = value;
             }
+            const int bush = packed_int(records, base + 1 + kMapLayers);
+            if (bush < 0 || bush > kMapLayers)
+                return fail("map_set_combos: bush value out of range");
+            entry.layer_tile_values[kMapLayers] = bush;
             combos[entry.tile_num] = entry;
         }
         ctx->combos = std::move(combos);
@@ -478,6 +491,8 @@ int map_build(int ctx_id, int tiles_count, int basic_count, int pattern_id, int 
             return fail("map_build: combo index out of range");
     }
     const int texture_rows = std::max(basic_count, 1);
+    if (!wall_textures_fit(ctx->tiletable, texture_rows))
+        return fail("map_build: wall texture index out of range");
     for (const Texture &texture : ctx->textures) {
         if (texture.basic_index >= texture_rows)
             return fail("map_build: texture basic index out of range");
