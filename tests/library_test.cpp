@@ -1053,6 +1053,32 @@ void test_sprite_past_the_map_edge_rows() {
     ctx_destroy(ctx);
 }
 
+// On a row under the first one, a sprite keeps its left columns when it
+// starts left of the sprite before it, or on the same column.
+void test_sprite_start_columns() {
+    const int ctx = build_map();
+    run_compute(ctx, 0);
+    const int narrow = image(8, 8, kBlue);
+    const int wide = image(32, 8, kGreen);
+    const int tall = image(8, 16, kGreen);
+    const int x1 = 300 - (row_zoom(ctx, 300) * 8 >> 12) / 2;
+    const int wide_x1 = 302 - (row_zoom(ctx, 300) * 32 >> 12) / 2;
+
+    // The game sorts by the center, so the wide sprite comes second.
+    Frame f = run_render(ctx, 0, {0, 300, 300, narrow, 0, 0, 0, 302, 300, wide, 0, 0});
+    check(f.ret >= 0, std::string("a wide sprite after a narrow one: ") + last_error());
+    check_pixel(kGreen, f.at(wide_x1, 297), "the first column of a wide sprite after a narrow one");
+
+    f = run_render(ctx, 0, {0, 300, 300, narrow, 0, 0, 0, 300, 300, tall, 0, 0});
+    check(f.ret >= 0, std::string("two sprites on one start column: ") + last_error());
+    check_pixel(kGreen, f.at(x1, 288), "the first column of the second sprite on one start column");
+
+    image_free(narrow);
+    image_free(wide);
+    image_free(tall);
+    ctx_destroy(ctx);
+}
+
 void test_out_of_memory() {
     const std::vector<std::uint8_t> px = pixels(64, 64, kRed);
     const int img = image_create(px.data(), px.size(), 64, 64);
@@ -1105,6 +1131,7 @@ int main() {
     test_lighting_without_history();
     test_sprite_width();
     test_sprite_past_the_map_edge_rows();
+    test_sprite_start_columns();
     test_autotile_animation();
     test_heights_and_walls();
     test_out_of_memory();

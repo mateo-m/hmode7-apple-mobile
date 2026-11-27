@@ -576,10 +576,12 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 ym = read_u16(ylp);
             }
 
-            // Surface pass for the column that this surface starts on. The
+            // Surface pass for each surface that starts on this column. The
             // original runs it after the off-map checks, so a surface that
-            // starts outside the map lost its foot row there.
-            if (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
+            // starts outside the map lost its foot row there. It also starts
+            // one surface per column, so a second one on the same start
+            // column lost its first column.
+            while (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
                 if (xt < sScreenX2) {
                     draw_surface_row(yt, rYt, xt, sInitZoomData, /*full_cover_test=*/true);
                 }

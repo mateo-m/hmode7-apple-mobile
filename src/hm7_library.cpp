@@ -678,6 +678,13 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
             s.disp_offset = 0;
             surfaces.push_back(s);
         }
+        // The original sorts again after it sizes the sprites. The
+        // renderer starts a sprite on the first column at or right of its
+        // left edge, so a sprite left of the one before it lost columns.
+        std::stable_sort(
+            surfaces.begin(), surfaces.end(), [](const RenderSurface &a, const RenderSurface &b) {
+                return a.screen_y1 != b.screen_y1 ? a.screen_y1 > b.screen_y1 : a.screen_x1 < b.screen_x1;
+            });
 
         Surface screen(SDL_CreateRGBSurfaceWithFormatFrom(screen_buf, ctx->render_w, ctx->render_h, 32,
                                                           ctx->render_w * 4, SDL_PIXELFORMAT_ABGR8888));
