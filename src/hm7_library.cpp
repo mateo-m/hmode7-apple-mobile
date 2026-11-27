@@ -656,15 +656,19 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
             const int altitude = packed_int(records, base + 4);
             if (altitude < INT16_MIN || altitude > INT16_MAX)
                 return fail("render: surface altitude out of range");
-            const int half = image->w >> 1;
+            // The original scales the width by the depth zoom of the
+            // foot row, which the surface zoom field (option 0) selects.
+            const long long width = static_cast<long long>(row_zoom(ctx_id, screen_y)) * image->w >> 12;
+            const long long x1 = screen_x - width / 2;
+            const long long x2 = x1 + width;
             // The renderer shifts the column offsets of a sprite by 12
             // bits, so a sprite far off the screen would overflow them.
-            if (screen_x + half <= 0 || screen_x - half >= ctx->render_w)
+            if (x2 <= 0 || x1 >= ctx->render_w)
                 continue;
             RenderSurface s = {};
-            s.screen_x1 = static_cast<int>(screen_x - half);
+            s.screen_x1 = static_cast<int>(x1);
             s.screen_y1 = screen_y;
-            s.screen_x2 = static_cast<int>(screen_x + half);
+            s.screen_x2 = static_cast<int>(x2);
             s.screen_y2 = screen_y;
             s.inverse = 0;
             s.bitmap = image;

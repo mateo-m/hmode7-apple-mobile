@@ -995,6 +995,42 @@ void test_lighting_without_history() {
     ctx_destroy(moved);
 }
 
+// A sprite spans its image width times the zoom of its foot row, also
+// for an odd width. The renderers of 1.4.4 and of the original library
+// both skip the last column of a span, so a 1 px span draws nothing.
+void test_sprite_width() {
+    struct Case {
+        const char *name;
+        int w;
+        int zoom;
+    } cases[] = {
+        {"a sprite 7 px wide", 7, 4096},
+        {"a sprite 1 px wide", 1, 4096},
+        {"a sprite 32 px wide at a 200 % camera distance", 32, 8192},
+    };
+    for (const Case &c : cases) {
+        const int ctx = build_map();
+        std::vector<std::int32_t> p = parameters(0);
+        p[10] = c.zoom;
+        compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1);
+        const int sprite = image(c.w, 8, kBlue);
+        const Frame f = run_render(ctx, 0, {0, 320, 300, sprite, 0, 0});
+        check(f.ret >= 0, std::string(c.name) + ": " + last_error());
+        const int width = row_zoom(ctx, 300) * c.w >> 12;
+        const int x1 = 320 - width / 2;
+        int blue = 0;
+        for (int x = 0; x < kScreenW; ++x)
+            blue += f.at(x, 299) == kBlue;
+        check_equal(width - 1, blue, std::string("blue columns of ") + c.name);
+        if (width > 1) {
+            check_pixel(kBlue, f.at(x1, 299), std::string("the first column of ") + c.name);
+            check_pixel(kBlue, f.at(x1 + width - 2, 299), std::string("the last column of ") + c.name);
+        }
+        image_free(sprite);
+        ctx_destroy(ctx);
+    }
+}
+
 void test_out_of_memory() {
     const std::vector<std::uint8_t> px = pixels(64, 64, kRed);
     const int img = image_create(px.data(), px.size(), 64, 64);
@@ -1045,6 +1081,7 @@ int main() {
     test_sprite_ranges();
     test_out_of_range_tiles();
     test_lighting_without_history();
+    test_sprite_width();
     test_autotile_animation();
     test_heights_and_walls();
     test_out_of_memory();
