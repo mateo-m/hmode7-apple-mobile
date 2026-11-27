@@ -25,6 +25,7 @@
 #include "hm7_pixels.h"
 
 #include <SDL_surface.h>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <algorithm>
@@ -208,6 +209,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
     else
         y0 = yMin;
     const int rowSpan = std::max(yMax - 1 - y0, 1);
+    // The zoom of a row below the zoom rows, on the line through them. The
+    // original did this in int, which overflowed far below the screen.
+    // Such a zoom has no upper limit, so a column of the sprite is skipped
+    // when it is taller, or rises or drops further, than kMaxSpriteRows.
+    constexpr int kMaxSpriteRows = 1 << 24;
+    auto estimate_zoom = [&](int base, int slope, int dy) {
+        const long long zoom = base + static_cast<long long>(slope) * dy / rowSpan;
+        return static_cast<int>(
+            std::min(std::max(zoom, static_cast<long long>(INT_MIN)), static_cast<long long>(INT_MAX)));
+    };
 
     // Lightline rows, laid out top-down to match the Ruby side
     // which writes the seed fade color via `set_pixel(0, 0, ...)`
@@ -261,16 +272,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
 
         int sC1, sC2;
         if (sScreenY1 >= yMax) {
-            sC1 = sCmin + (sCsl * (sScreenY1 - y0)) / rowSpan;
+            sC1 = estimate_zoom(sCmin, sCsl, sScreenY1 - y0);
             if (sScreenY2 < 0 || sScreenY2 >= yMax) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / rowSpan;
+                sC2 = estimate_zoom(sCmin, sCsl, sScreenY2 - y0);
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
         } else {
             sC1 = read_u16(reliefRow + (sScreenY1 << 2));
             if (sScreenY2 < 0) {
-                sC2 = sCmin + (sCsl * (sScreenY2 - y0)) / rowSpan;
+                sC2 = estimate_zoom(sCmin, sCsl, sScreenY2 - y0);
             } else {
                 sC2 = read_u16(reliefRow + (sScreenY2 << 2));
             }
@@ -308,7 +319,7 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 // Above the lightline rows, so scale from the row
                 // range. Billboards use depth scale (HT2) whatever
                 // the surface type is. The else branch explains why.
-                sFYt = sCminHT2 + (sCslHT2 * (yt - sH0 - y0)) / rowSpan;
+                sFYt = estimate_zoom(sCminHT2, sCslHT2, yt - sH0 - y0);
                 sFYth = sFYt;
                 sHbase = 0;
             } else {
@@ -351,11 +362,17 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 sHbase = sH0;
             }
 
-            sH0 += (sDh * sFYth) >> 15;
+            const long long rise = sH0 + ((static_cast<long long>(sDh) * sFYth) >> 15);
+            if (rise < -kMaxSpriteRows || rise > kMaxSpriteRows)
+                continue;
+            sH0 = static_cast<int>(rise);
             const int sHend = (sH0 < 0) ? 0 : sH0;
             if (rYt - sH0 < yMin)
                 continue;
-            const int sRealHeight = (sHeight * sFYt) >> 12;
+            const long long realHeight = (static_cast<long long>(sHeight) * sFYt) >> 12;
+            if (realHeight > kMaxSpriteRows)
+                continue;
+            const int sRealHeight = static_cast<int>(realHeight);
             if (sRealHeight < 2)
                 continue;
 

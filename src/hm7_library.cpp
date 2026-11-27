@@ -649,16 +649,20 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
             // An upright sprite: both anchor points sit on its foot line.
             const long long screen_x = packed_int(records, base + 1);
             const int screen_y = packed_int(records, base + 2);
-            // The game only sends a sprite whose foot is on the screen.
-            if (screen_y < 0 || screen_y >= ctx->render_h)
-                return fail("render: surface foot outside the screen");
+            // The renderer draws rows from the bottom of the screen up,
+            // and starts a sprite on the first row at or above its foot,
+            // so a foot above the screen never starts.
+            if (screen_y < 0)
+                continue;
             // The renderer multiplies the altitude by a 16-bit zoom.
             const int altitude = packed_int(records, base + 4);
             if (altitude < INT16_MIN || altitude > INT16_MAX)
                 return fail("render: surface altitude out of range");
             // The original scales the width by the depth zoom of the
             // foot row, which the surface zoom field (option 0) selects.
-            const long long width = static_cast<long long>(row_zoom(ctx_id, screen_y)) * image->w >> 12;
+            // For a foot past the zoom rows, it takes the last one.
+            const int zoom_row = std::min(screen_y, ctx->rowsdata->w - 1);
+            const long long width = static_cast<long long>(row_zoom(ctx_id, zoom_row)) * image->w >> 12;
             const long long x1 = screen_x - width / 2;
             const long long x2 = x1 + width;
             // The renderer shifts the column offsets of a sprite by 12

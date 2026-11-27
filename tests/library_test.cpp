@@ -746,12 +746,52 @@ void test_sprite_ranges() {
         check_error("render: surface altitude out of range", what);
     }
 
-    run_compute(ctx, 60);
-    for (int y : {-1, kScreenH, INT32_MAX, INT32_MIN}) {
-        const std::string what = "a sprite foot at screen y " + std::to_string(y);
-        check_equal(-1, run_render(ctx, 60, {0, 320, y, sprite, 0, 0}).ret, what);
-        check_error("render: surface foot outside the screen", what);
+    // A foot off the screen does not stop the frame. The original takes
+    // the width from the zoom row of the foot, or from the last zoom row
+    // for a foot past them. On a 640 x 480 screen, zoom rows 480 to 639
+    // are empty, so a foot below the screen gets no width.
+    auto blue_rows = [&](int c, double alpha, int foot, const View &v, int x) {
+        const Frame f = run_render(c, alpha, {0, x, foot, sprite, 0, 0}, v);
+        const std::string what = "a sprite foot at screen y " + std::to_string(foot);
+        check(f.ret >= 0, what + ": " + last_error());
+        int blue = 0;
+        for (int y = 0; y < v.h; ++y)
+            blue += f.at(x, y) == kBlue;
+        return blue;
+    };
+    run_compute(ctx, 0);
+    for (int y : {-1, kScreenH, 1 << 20, INT32_MAX, INT32_MIN})
+        check_equal(0, blue_rows(ctx, 0, y, View(), 320),
+                    "blue rows of a sprite foot at screen y " + std::to_string(y));
+
+    // On a 64 x 480 screen, the last zoom row is the last screen row. The
+    // sprite moves down with its foot, and the bottom edge cuts it.
+    Map m;
+    m.render_w = 64;
+    const int narrow = build_map(m);
+    View v;
+    v.w = 64;
+    run_compute(narrow, 0);
+    check_equal(8, blue_rows(narrow, 0, kScreenH - 1, v, 32), "blue rows of a sprite foot on the last row");
+    check_equal(7, blue_rows(narrow, 0, kScreenH, v, 32), "blue rows of a sprite foot just below the screen");
+    check_equal(1, blue_rows(narrow, 0, kScreenH + 6, v, 32),
+                "blue rows of a sprite foot 7 rows below the screen");
+    check_equal(0, blue_rows(narrow, 0, kScreenH + 7, v, 32),
+                "blue rows of a sprite foot 8 rows below the screen");
+    // Far below the screen, the estimated zoom of a slanted camera
+    // overflowed the int math of the original.
+    const int tall_sprite = image(16, 4096, kBlue);
+    for (int alpha : {1, 60}) {
+        run_compute(narrow, alpha);
+        for (int y : {kScreenH, kScreenH + 100000, 1 << 30, INT32_MAX}) {
+            blue_rows(narrow, alpha, y, v, 32);
+            const Frame f = run_render(narrow, alpha, {0, 32, y, tall_sprite, INT16_MAX, 0}, v);
+            check(f.ret >= 0,
+                  "a tall high sprite foot at screen y " + std::to_string(y) + ": " + last_error());
+        }
     }
+    image_free(tall_sprite);
+    ctx_destroy(narrow);
     image_free(sprite);
     ctx_destroy(ctx);
 }
