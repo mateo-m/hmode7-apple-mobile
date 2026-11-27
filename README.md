@@ -30,6 +30,12 @@ Complete. Output verified against the public V1.4.4 source for all nine exports 
 | `drawMapTileset`, `refreshMapTileset` | Per-cell composited tileset |
 | `renderHM7` | Main per-scanline rasterizer (~1000 LOC in the reference) |
 
+## The hm7_* library
+
+Some games replace `MGC_Hmode7.dll` with their own library, `hmode7.dll` or `libhmode7.so`. That library has 22 `hm7_*` exports, and it keeps each map in a context. [`src/hm7_library.h`](src/hm7_library.h) gives the same functions as a C++ API with no Ruby. The engine binds each export to one of these functions.
+
+To run the host tests of this API, run `scripts/test.sh`. The script needs a C++14 compiler, pkg-config, and SDL2. It runs the tests under AddressSanitizer and UBSan.
+
 ## Documents
 
 - [`docs/WALL_LAYER_MODE.md`](docs/WALL_LAYER_MODE.md): the two wall-layer-selection algorithms, auto-detection, override knobs.
