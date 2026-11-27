@@ -1031,6 +1031,28 @@ void test_sprite_width() {
     }
 }
 
+// A sprite has the same rows over the map and over the space past the
+// map edge.
+void test_sprite_past_the_map_edge_rows() {
+    Map m;
+    m.map_w = 10;
+    const int ctx = build_map(m);
+    run_compute(ctx, 0);
+    const int sprite = image(8, 8, kBlue);
+    const Frame f = run_render(ctx, 0, {0, 160, 300, sprite, 0, 0, 0, 480, 300, sprite, 0, 0});
+    check(f.ret >= 0, std::string("sprites on and past the map edge: ") + last_error());
+    for (int x : {160, 480}) {
+        int blue = 0;
+        for (int y = 0; y < kScreenH; ++y)
+            blue += f.at(x, y) == kBlue;
+        const std::string name = x == 160 ? "the sprite over the map" : "the sprite past the map edge";
+        check_equal(8, blue, "blue rows of " + name);
+        check_pixel(kBlue, f.at(x, 300), "the foot row of " + name);
+    }
+    image_free(sprite);
+    ctx_destroy(ctx);
+}
+
 void test_out_of_memory() {
     const std::vector<std::uint8_t> px = pixels(64, 64, kRed);
     const int img = image_create(px.data(), px.size(), 64, 64);
@@ -1082,6 +1104,7 @@ int main() {
     test_out_of_range_tiles();
     test_lighting_without_history();
     test_sprite_width();
+    test_sprite_past_the_map_edge_rows();
     test_autotile_animation();
     test_heights_and_walls();
     test_out_of_memory();

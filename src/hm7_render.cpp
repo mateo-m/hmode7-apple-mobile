@@ -576,6 +576,16 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                 ym = read_u16(ylp);
             }
 
+            // Surface pass for the column that this surface starts on. The
+            // original runs it after the off-map checks, so a surface that
+            // starts outside the map lost its foot row there.
+            if (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
+                if (xt < sScreenX2) {
+                    draw_surface_row(yt, rYt, xt, sInitZoomData, /*full_cover_test=*/true);
+                }
+                advance_surface();
+            }
+
             int xs = pp.data_table[xt + oy] + displayX;
             int ys = pp.data_table[xt + oy + oz] + displayY;
 
@@ -653,14 +663,6 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
                     oCamera = ody_cam;
             }
             int ody = rYt - dy;
-
-            // Surface pass for the column that this surface starts on.
-            if (sNext && yt <= sScreenY1 && xt >= sScreenX1) {
-                if (xt < sScreenX2) {
-                    draw_surface_row(yt, rYt, xt, sInitZoomData, /*full_cover_test=*/true);
-                }
-                advance_surface();
-            }
 
             if (ym <= ody)
                 continue;
@@ -854,11 +856,10 @@ int render_hm7(const RenderParams &pp, const RenderVars &vv, const RenderSurface
             }
         }
 
-        // The column pass starts a surface only on a map column at or
-        // right of its start. A surface right of the last column or
-        // over the space past the map edge would wait there and hold
-        // back every surface after it. Start it on the first column that
-        // the column pass would visit.
+        // The column pass starts a surface only on a column at or right
+        // of its start. A surface right of the last column would wait
+        // there and hold back every surface after it. Start it on the
+        // first column that the column pass would visit.
         while (sNext && yt <= sScreenY1) {
             draw_surface_row(yt, rYt, surface_start_column(step == 2), sInitZoomData,
                              /*full_cover_test=*/true);
