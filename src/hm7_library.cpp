@@ -35,6 +35,7 @@ constexpr int kComboFields = 5;
 constexpr int kSurfaceFields = 6;
 // RPG Maker XP maps are at most 500 x 500 tiles.
 constexpr int kMaxMapSize = 500;
+constexpr int kMaxMapPixels = kMaxMapSize * 32;
 constexpr int kMaxRenderSize = 4096;
 // The only option the game sets. The renderer always takes the sprite
 // width from field 2 of the rows data.
@@ -602,9 +603,15 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
     if (filter < 0 || filter > 2)
         return fail("render: filter must be 0, 1 or 2");
     // The game sends back the offset that render returned, which is never
-    // negative. The renderer draws rows from the offset down.
-    if (o_scr_y < 0)
-        return fail("render: negative camera offset");
+    // negative. The renderer draws rows from the offset down, and it keeps
+    // the bottom row plus the offset in 16 bits.
+    if (o_scr_y < 0 || o_scr_y > 0xFFFF - ctx->ct_ys)
+        return fail("render: camera offset out of range");
+    // The renderer adds the map position to the int16 map coordinates of
+    // the projection table.
+    if (display_x < -kMaxMapPixels || display_x > kMaxMapPixels || display_y < -kMaxMapPixels ||
+        display_y > kMaxMapPixels)
+        return fail("render: map position out of range");
     if (n < 0 || (!records && n > 0) || records_len < static_cast<std::size_t>(n) * kSurfaceFields * 4)
         return fail("render: bad surfaces array");
 
@@ -622,9 +629,18 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
                 return fail("render: surface references an unknown image");
             if (image->w > kMaxRenderSize)
                 return fail("render: surface wider than 4096 px");
+            if (image->h > kMaxRenderSize)
+                return fail("render: surface taller than 4096 px");
             // An upright sprite: both anchor points sit on its foot line.
             const long long screen_x = packed_int(records, base + 1);
             const int screen_y = packed_int(records, base + 2);
+            // The game only sends a sprite whose foot is on the screen.
+            if (screen_y < 0 || screen_y >= ctx->render_h)
+                return fail("render: surface foot outside the screen");
+            // The renderer multiplies the altitude by a 16-bit zoom.
+            const int altitude = packed_int(records, base + 4);
+            if (altitude < INT16_MIN || altitude > INT16_MAX)
+                return fail("render: surface altitude out of range");
             const int half = image->w >> 1;
             // The renderer shifts the column offsets of a sprite by 12
             // bits, so a sprite far off the screen would overflow them.
@@ -637,7 +653,7 @@ int render(int ctx_id, void *screen_buf, std::size_t len, long bufsize, int heig
             s.screen_y2 = screen_y;
             s.inverse = 0;
             s.bitmap = image;
-            s.dh = packed_int(records, base + 4);
+            s.dh = altitude;
             s.blend = packed_int(records, base + 5);
             s.disp_width = image->w;
             s.disp_offset = 0;

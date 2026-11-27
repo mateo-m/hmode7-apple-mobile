@@ -7,6 +7,7 @@
 
 #include <SDL.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -413,10 +414,6 @@ void test_bad_input() {
     const int built = build_map();
     run_compute(built, 0);
     std::vector<std::uint8_t> buf(kScreenW * kScreenH * 4);
-    // The renderer starts its rows at the camera offset.
-    check_equal(-1, render(built, buf.data(), buf.size(), buf.size(), 0, 0, 0, 0, -1, nullptr, 0, 0),
-                "negative camera offset");
-    check_error("render: negative camera offset", "negative camera offset");
     check_equal(-1, render(built, buf.data(), buf.size(), buf.size(), 0, 0, 0, 3, 0, nullptr, 0, 0),
                 "filter 3");
     check_error("render: filter must be 0, 1 or 2", "filter 3");
@@ -509,12 +506,12 @@ void test_sprite_out_of_reach() {
 }
 
 // A horizon on the last row leaves one row of zoom data, and a sprite
-// foot under the screen scales from it.
+// on that row scales from it.
 void test_horizon_on_last_row() {
     const int ctx = build_map();
     run_compute(ctx, 0);
     const int sprite = image(8, 48, kBlue);
-    const Frame f = run_render(ctx, 0, {0, 320, kScreenH + 10, sprite, 0, 0}, View(), kScreenH - 1);
+    const Frame f = run_render(ctx, 0, {0, 320, kScreenH - 1, sprite, 0, 0}, View(), kScreenH - 1);
     check(f.ret >= 0, std::string("render with the horizon on the last row: ") + last_error());
     image_free(sprite);
     ctx_destroy(ctx);
@@ -544,6 +541,204 @@ void test_far_and_wide_sprites() {
     check_error("render: surface wider than 4096 px", "a 4098 px sprite");
     image_free(too_wide);
     image_free(wide);
+    image_free(sprite);
+    ctx_destroy(ctx);
+}
+
+long long floor_div(long long a, long long b) {
+    const long long q = a / b;
+    return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q;
+}
+
+// HM7::Tilemap#refresh_alpha and #initialize, with Ruby's floor division
+// on integers and its float math on the 1.33 and 1.334 factors.
+std::vector<std::int32_t> game_parameters(int resolution, int alpha, int zoom, int theta) {
+    const double alpha_rad = M_PI * alpha / 180;
+    const double theta_rad = M_PI * theta / 180;
+    const long long cos_alpha = static_cast<int>(2048 * std::cos(alpha_rad));
+    const long long sin_alpha = static_cast<int>(2048 * std::sin(alpha_rad));
+    const long long depth = kDistanceH << 11;
+    const long long h0 = floor_div(-kDistanceH * kPivot * cos_alpha, depth + kPivot * sin_alpha) + kPivot;
+    const double z0 = static_cast<double>(depth) / (depth + kPivot * sin_alpha);
+    const double slope = (1.0 - z0) / (kPivot - h0);
+    const double corrective = 1.0 - kPivot * slope;
+    const double coeff = resolution == 1 ? 1 : resolution == 2 ? 1.334 : 2;
+
+    double pivot_map, distance_p, height_limit;
+    if (resolution == 2) {
+        pivot_map = kPivot / 1.33;
+        distance_p = kDistanceH - kDistanceH / 1.334;
+        const double last_line = -pivot_map - 960;
+        height_limit =
+            ((kDistanceH - distance_p) * last_line * cos_alpha) / (depth - last_line * sin_alpha) + pivot_map;
+    } else {
+        const long long divisor = resolution;
+        const long long pivot_int = kPivot / divisor;
+        const long long distance_int = kDistanceH - kDistanceH / divisor;
+        const long long last_line = -pivot_int - 960;
+        pivot_map = static_cast<double>(pivot_int);
+        distance_p = static_cast<double>(distance_int);
+        height_limit = static_cast<double>(
+            floor_div((kDistanceH - distance_int) * last_line * cos_alpha, depth - last_line * sin_alpha) +
+            pivot_int);
+    }
+    return {static_cast<std::int32_t>(cos_alpha),
+            static_cast<std::int32_t>(sin_alpha),
+            kDistanceH,
+            static_cast<std::int32_t>(pivot_map),
+            static_cast<std::int32_t>(131072 * slope),
+            static_cast<std::int32_t>(131072 * corrective / coeff),
+            std::max(static_cast<std::int32_t>(height_limit), 0),
+            static_cast<std::int32_t>(2048 * std::cos(theta_rad)),
+            static_cast<std::int32_t>(2048 * std::sin(theta_rad)),
+            static_cast<std::int32_t>(distance_p),
+            static_cast<std::int32_t>(4096 * (1.0 / (zoom / 100.0))),
+            0};
+}
+
+// The game keeps the slant in 0..80 degrees and the zoom in 1..500 %,
+// and draws at 640 x 480, 480 x 360, or 320 x 240.
+void test_game_camera_values() {
+    const int sizes[][2] = {{640, 480}, {480, 360}, {320, 240}};
+    for (int resolution = 1; resolution <= 3; ++resolution) {
+        for (int less_cut = 0; less_cut <= 1; ++less_cut) {
+            const int w = sizes[resolution - 1][0];
+            const int h = sizes[resolution - 1][1];
+            const int ctx = ctx_create(kMapW, kMapH, w, h, 0, 0, 0, less_cut, 0);
+            for (int alpha : {0, 1, 10, 30, 45, 60, 79, 80}) {
+                for (int zoom : {1, 50, 80, 100, 500}) {
+                    for (int theta : {0, 45, 90, 180, 270, 359}) {
+                        const std::vector<std::int32_t> p = game_parameters(resolution, alpha, zoom, theta);
+                        if (compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1) == 0)
+                            continue;
+                        check(false, "compute at resolution " + std::to_string(resolution) + ", less_cut " +
+                                         std::to_string(less_cut) + ", slant " + std::to_string(alpha) +
+                                         ", zoom " + std::to_string(zoom) + ", rotation " +
+                                         std::to_string(theta) + ": " + last_error());
+                    }
+                }
+            }
+            ctx_destroy(ctx);
+        }
+    }
+}
+
+int wrap32(long long v) {
+    return static_cast<int>(static_cast<std::uint32_t>(v));
+}
+
+// UBSan stops the test run when a step of the projection overflows.
+void test_projection_overflow() {
+    const int ctx = build_map();
+    std::vector<std::int32_t> p = parameters(0);
+    p[0] = 2048;
+    p[2] = INT32_MAX;
+    p[9] = 0;
+    check_equal(0, compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1), "compute at altitude INT32_MAX");
+    p = parameters(0);
+    p[10] = INT32_MAX;
+    check_equal(0, compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1), "compute at zoom INT32_MAX");
+    p = parameters(60);
+    p[5] = 0;
+    check_equal(0, compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1), "compute with no corrective value");
+    ctx_destroy(ctx);
+}
+
+// At a slant of 80 degrees and a zoom of 1 % on a 320 x 240 screen, xp
+// leaves the int range. The x86 library wraps it in 32 bits.
+void test_wrapped_projection() {
+    const int w = 320;
+    const int h = 240;
+    const int ctx = ctx_create(kMapW, kMapH, w, h, 0, 0, 0, 0, 0);
+    const std::vector<std::int32_t> p = game_parameters(3, 80, 1, 0);
+    check_equal(0, compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1), "compute");
+    const int a = w >> 1;
+    const auto tagged = [](int n) {
+        return wrap32(static_cast<long long>(static_cast<unsigned>(n) << 1)) | 1;
+    };
+    const int sin_alpha = tagged(p[1]);
+    const int slope = tagged(p[4]);
+    const int corrective = tagged(p[5]);
+    int wrapped_rows = 0;
+    for (int y = std::max(p[6], 0); y < h; ++y) {
+        const int val_1 = slope * y + corrective;
+        const long long xp_wide = static_cast<long long>(p[10]) * (val_1 != 0 ? (a << 18) / val_1 : 0);
+        if (xp_wide > INT32_MAX || xp_wide < INT32_MIN)
+            ++wrapped_rows;
+        const int xp0 = wrap32(xp_wide) >> 12;
+        const int divisor = xp0 != 0 ? xp0 : 1;
+        const std::uint8_t relief_hi = static_cast<std::uint8_t>(a * sin_alpha / divisor >> 8);
+        const int zoom = (a << 12) / divisor;
+        const int expected =
+            (static_cast<std::uint8_t>(zoom >> 8) << 8) | static_cast<std::uint8_t>(zoom - (relief_hi << 8));
+        check_equal(expected, row_zoom(ctx, y), "row_zoom of row " + std::to_string(y));
+    }
+    check(wrapped_rows > 0, "xp leaves the int range on some rows");
+    ctx_destroy(ctx);
+}
+
+void test_render_camera_range() {
+    const int ctx = build_map();
+    run_compute(ctx, 0);
+    std::vector<std::uint8_t> buf(kScreenW * kScreenH * 4);
+    auto render_at = [&](int display_x, int display_y, int o_scr_y) {
+        return render(ctx, buf.data(), buf.size(), static_cast<long>(buf.size()), 0, display_x, display_y, 0,
+                      o_scr_y, nullptr, 0, 0);
+    };
+    const int top_offset = 0xFFFF - kScreenH;
+    for (int offset : {-1, INT32_MAX, top_offset + 1}) {
+        const std::string what = "camera offset " + std::to_string(offset);
+        check_equal(-1, render_at(0, 0, offset), what);
+        check_error("render: camera offset out of range", what);
+    }
+    check(render_at(0, 0, top_offset) >= 0,
+          "camera offset " + std::to_string(top_offset) + ": " + last_error());
+
+    // A map is at most 500 tiles of 32 px.
+    const int far = 500 * 32 + 1;
+    for (int position : {INT32_MAX / 2, INT32_MIN / 2, far, -far}) {
+        const std::string what = "map position " + std::to_string(position);
+        check_equal(-1, render_at(position, 0, 0), what + " on x");
+        check_error("render: map position out of range", what + " on x");
+        check_equal(-1, render_at(0, position, 0), what + " on y");
+        check_error("render: map position out of range", what + " on y");
+    }
+    check(render_at(far - 1, 1 - far, 0) >= 0, std::string("the farthest map position: ") + last_error());
+    ctx_destroy(ctx);
+}
+
+void test_sprite_ranges() {
+    const int ctx = build_map();
+    std::vector<std::int32_t> p = parameters(0);
+    p[10] = 4108;
+    compute(ctx, p.data(), p.size() * 4, 0, 0, 255, 1);
+    const int tall = image(2, 4096, kBlue);
+    check(run_render(ctx, 0, {0, 320, kScreenH - 1, tall, 0, 0}).ret >= 0,
+          std::string("a 4096 px tall sprite: ") + last_error());
+    image_free(tall);
+    const int too_tall = image(2, 524288, kBlue);
+    check_equal(-1, run_render(ctx, 0, {0, 320, kScreenH - 1, too_tall, 0, 0}).ret,
+                "a 524288 px tall sprite");
+    check_error("render: surface taller than 4096 px", "a 524288 px tall sprite");
+    image_free(too_tall);
+
+    const int sprite = image(8, 8, kBlue);
+    for (int altitude : {INT16_MIN, INT16_MAX}) {
+        check(run_render(ctx, 0, {0, 320, 300, sprite, altitude, 0}).ret >= 0,
+              "a sprite at altitude " + std::to_string(altitude) + ": " + last_error());
+    }
+    for (int altitude : {INT16_MIN - 1, INT16_MAX + 1, INT32_MAX}) {
+        const std::string what = "a sprite at altitude " + std::to_string(altitude);
+        check_equal(-1, run_render(ctx, 0, {0, 320, 300, sprite, altitude, 0}).ret, what);
+        check_error("render: surface altitude out of range", what);
+    }
+
+    run_compute(ctx, 60);
+    for (int y : {-1, kScreenH, INT32_MAX, INT32_MIN}) {
+        const std::string what = "a sprite foot at screen y " + std::to_string(y);
+        check_equal(-1, run_render(ctx, 60, {0, 320, y, sprite, 0, 0}).ret, what);
+        check_error("render: surface foot outside the screen", what);
+    }
     image_free(sprite);
     ctx_destroy(ctx);
 }
@@ -762,6 +957,11 @@ int main() {
     test_sprite_out_of_reach();
     test_horizon_on_last_row();
     test_far_and_wide_sprites();
+    test_game_camera_values();
+    test_projection_overflow();
+    test_wrapped_projection();
+    test_render_camera_range();
+    test_sprite_ranges();
     test_out_of_range_tiles();
     test_autotile_animation();
     test_heights_and_walls();

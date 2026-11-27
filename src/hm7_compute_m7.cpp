@@ -35,13 +35,31 @@
 
 #include <SDL_surface.h>
 
+#include <cstdint>
+
 namespace hm7 {
 
 namespace {
-// Windows divide-by-zero behavior guard, matches `DIVISE` macro in
-// the original. Returns `a / b` unless `b == 0` in which case 0.
+// The x86 build of the library does this math with 32-bit shifts,
+// multiplies, and divides, so an overflow wraps. Camera values that a
+// game sends overflow xp at a slant of 72 degrees or more with a zoom
+// under 42 % on a 320 x 240 screen. Signed overflow is undefined in C++,
+// so the port wraps on purpose to give the same result.
+inline int wrap(long long v) {
+    return static_cast<int>(static_cast<std::uint32_t>(v));
+}
+inline int add(int a, int b) {
+    return wrap(static_cast<long long>(a) + b);
+}
+inline int sub(int a, int b) {
+    return wrap(static_cast<long long>(a) - b);
+}
+inline int mul(int a, int b) {
+    return wrap(static_cast<long long>(a) * b);
+}
+// The DIVISE macro of the original: 0 when b is 0.
 inline int divise(int a, int b) {
-    return b != 0 ? a / b : 0;
+    return b != 0 ? wrap(static_cast<long long>(a) / b) : 0;
 }
 }  // namespace
 
@@ -53,7 +71,7 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
     const int a = xsize >> 1;
     const int xc = a;
     const int yc = params.pivot;
-    const int val_4 = (params.altitude - params.distProj) * params.cosAngle;
+    const int val_4 = mul(sub(params.altitude, params.distProj), params.cosAngle);
     const long oz = static_cast<long>(xsize) * ysize;
 
     // Lightline layout reminder: the Ruby side allocates
@@ -103,30 +121,30 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
         y0 = params.yMin;
 
     for (int yt = y0; yt < yMax; ++yt) {
-        const int yt_rel = yt - params.pivot;
-        const int denom = (val_4 + yt_rel * params.sinAngle) >> 12;
-        const int yp = (divise(params.altitude * yt_rel, denom) * params.zoom >> 12) + params.pivot;
+        const int yt_rel = sub(yt, params.pivot);
+        const int denom = add(val_4, mul(yt_rel, params.sinAngle)) >> 12;
+        const int yp = add(mul(divise(mul(params.altitude, yt_rel), denom), params.zoom) >> 12, params.pivot);
         const int ys = yp;
-        const int val_1 = params.slope * yt + params.correction;
-        const int val_2 = (ys - yc) * params.cosTheta;
-        const int val_3 = (ys - yc) * params.sinTheta;
+        const int val_1 = add(mul(params.slope, yt), params.correction);
+        const int val_2 = mul(sub(ys, yc), params.cosTheta);
+        const int val_3 = mul(sub(ys, yc), params.sinTheta);
 
         // Lightline lighting attenuation (row 0, packed by byte).
         // renderHM7 reads these same byte offsets, so the writes
         // here must land at the same byte indices, not at Pixel
         // struct fields which would reorder them.
-        const int ypl = params.pivot - yp;
+        const int ypl = sub(params.pivot, yp);
         if (ypl >= 0 && yt < lightline->w) {
             std::uint8_t *p = lightingRowBytes + (yt << 2);
-            int lux = (lux_0 * ypl) / 960;
+            int lux = mul(lux_0, ypl) / 960;
             if (lux > 255)
                 lux = 255;
             p[0] = static_cast<std::uint8_t>(lux);
-            lux = (lux_1 * ypl) / 960;
+            lux = mul(lux_1, ypl) / 960;
             if (lux > 255)
                 lux = 255;
             p[1] = static_cast<std::uint8_t>(lux);
-            lux = (lux_2 * ypl) / 960;
+            lux = mul(lux_2, ypl) / 960;
             if (lux > 255)
                 lux = 255;
             p[2] = static_cast<std::uint8_t>(lux);
@@ -137,19 +155,19 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
 
         int xp0 = 0;
         for (int xt = params.xMin; xt < a; ++xt) {
-            const int xp = params.zoom * divise((a - xt) << 18, val_1) >> 12;
+            const int xp = mul(params.zoom, divise((a - xt) << 18, val_1)) >> 12;
 
             if (xt == params.xMin) {
-                xp0 = params.xMin ? (params.zoom * divise(a << 18, val_1) >> 12) : xp;
+                xp0 = params.xMin ? (mul(params.zoom, divise(a << 18, val_1)) >> 12) : xp;
                 if (yt < lightline->w) {
                     std::uint8_t *relief = reliefRowBytes + (yt << 2);
                     // Relief coefficient val_5 = (a * sinAngle) / xp0.
                     // Packed high/low byte pair at byte offsets [0,1].
-                    int val_5 = (a * params.sinAngle) / (xp0 != 0 ? xp0 : 1);
+                    int val_5 = divise(mul(a, params.sinAngle), xp0 != 0 ? xp0 : 1);
                     relief[0] = static_cast<std::uint8_t>(val_5 >> 8);
                     relief[1] = static_cast<std::uint8_t>(val_5 - (relief[0] << 8));
                     // Horizontal zoom (a<<12)/xp0, packed at [2,3].
-                    val_5 = (a << 12) / (xp0 != 0 ? xp0 : 1);
+                    val_5 = divise(a << 12, xp0 != 0 ? xp0 : 1);
                     relief[2] = static_cast<std::uint8_t>(val_5 >> 8);
                     // Preserve the original's `- (lightlineData[0] << 8)`
                     // quirk: it uses [0] (the relief hi byte we just
@@ -162,20 +180,20 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
 
             // Left half: xs = a - xp.
             {
-                const int xs = a - xp;
-                const int xs_rel = xs - xc;
-                const int yr = yc + ((xs_rel * params.sinTheta + val_2) >> 12);
-                const int xr = xc + ((xs_rel * params.cosTheta - val_3) >> 12);
+                const int xs = sub(a, xp);
+                const int xs_rel = sub(xs, xc);
+                const int yr = add(yc, add(mul(xs_rel, params.sinTheta), val_2) >> 12);
+                const int xr = add(xc, sub(mul(xs_rel, params.cosTheta), val_3) >> 12);
                 data_table[xt + oy] = static_cast<std::int16_t>(xr);
                 data_table[xt + oy + oz] = static_cast<std::int16_t>(yr);
             }
 
             // Right half (mirrored): xs = a + xp, stored at xsize-1-xt.
             {
-                const int xs = a + xp;
-                const int xs_rel = xs - xc;
-                const int yr = yc + ((xs_rel * params.sinTheta + val_2) >> 12);
-                const int xr = xc + ((xs_rel * params.cosTheta - val_3) >> 12);
+                const int xs = add(a, xp);
+                const int xs_rel = sub(xs, xc);
+                const int yr = add(yc, add(mul(xs_rel, params.sinTheta), val_2) >> 12);
+                const int xr = add(xc, sub(mul(xs_rel, params.cosTheta), val_3) >> 12);
                 data_table[xsize - 1 - xt + oy] = static_cast<std::int16_t>(xr);
                 data_table[xsize - 1 - xt + oy + oz] = static_cast<std::int16_t>(yr);
             }
