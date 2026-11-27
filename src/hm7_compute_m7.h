@@ -39,10 +39,10 @@ struct ComputeM7Params {
 // `xsize`, `ysize`: Table dimensions.
 // `lightline`: 3-row bitmap used for scratch + per-row lighting. The
 //   top-down row mapping is:
-//     row 2 — lighting attenuation (BGR + flag per screen Y)
+//     row 0 — lighting attenuation (BGR + flag per screen Y)
 //     row 1 — per-column relief/zoom scratch
-//     row 0 — reserved for renderHM7's per-column `ym` tracking
-//   Must be pre-seeded: row 2 column 0 should hold the fade color
+//     row 2 — reserved for renderHM7's per-column `ym` tracking
+//   Must be pre-seeded: row 0 column 0 should hold the fade color
 //   (see Ruby `@rowsdata.set_pixel(0, 0, hm7_fading_color)`).
 // `params`: the 16-field parameter bundle. See Ruby 210-HM7_NEW_CLASSES.rb:512.
 //

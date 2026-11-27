@@ -39,9 +39,11 @@ int set_option(int ctx, int option, int value);
 int map_set_tileset(int ctx, int tileset, int heightset);
 // A heightset of 0 makes the autotile flat.
 int map_set_autotile(int ctx, int slot, int frame, int sheet, int heightset);
-// int16 cells, 4 for each map cell: 3 layers and the height.
+// int16 cells, 4 for each map cell: the combination index, then the
+// wall texture of each of the 3 layers.
 int map_set_tiletable(int ctx, const void *cells, std::size_t len, int xs, int ys);
-// n records of 5 int32: the combination key and its 4 layer values.
+// n records of 5 int32: the combination key, its 3 layer tile values,
+// and the bush value (0 to 3).
 int map_set_combos(int ctx, const void *records, std::size_t len, int n);
 // n int32 combination keys that hold an animated autotile.
 int map_set_animated(int ctx, const void *keys, std::size_t len, int n);

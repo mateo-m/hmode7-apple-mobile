@@ -26,9 +26,9 @@
 // the rotation formula).
 //
 // Lightline scratch layout (see header doc):
-//   row 2 — per-row lighting attenuation, BGRA-style
+//   row 0 — per-row lighting attenuation, BGRA-style
 //   row 1 — per-column relief coefficient + horizontal zoom scratch
-//   row 0 — (untouched here, reserved for renderHM7)
+//   row 2 — (untouched here, reserved for renderHM7)
 
 #include "hm7_compute_m7.h"
 #include "hm7_pixels.h"
@@ -36,6 +36,7 @@
 #include <SDL_surface.h>
 
 #include <cstdint>
+#include <cstring>
 
 namespace hm7 {
 
@@ -110,6 +111,10 @@ int compute_m7(std::int16_t *data_table, int xsize, int ysize, SDL_Surface *ligh
     int lux_1 = fade[1];
     int lux_2 = fade[2];
     int lux_3 = fade[3];
+    // The loop skips the rows under the pivot and the rows out of
+    // y0..yMax. The original left the fade of an earlier camera in
+    // them, so a frame depended on the cameras before it.
+    std::memset(lightingRowBytes + 4, 0, static_cast<std::size_t>(lightline->w - 1) * 4);
 
     int yMax = params.yMax;
     if (params.lessCut) {

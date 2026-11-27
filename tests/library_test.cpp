@@ -968,6 +968,33 @@ void *test_realloc(void *p, std::size_t size) {
     return refuse(size) ? nullptr : g_realloc(p, size);
 }
 
+// A frame does not depend on the cameras before it. A lower pivot
+// puts more rows under it, and the projection skips the fade of those
+// rows.
+void test_lighting_without_history() {
+    std::vector<std::int32_t> low = parameters(0);
+    low[3] = kPivot / 2;
+    const int fresh = build_map();
+    compute(fresh, low.data(), low.size() * 4, 0, 0, 255, 1);
+    const Frame expected = run_render(fresh, 0, {}, View(), low[6]);
+
+    const int moved = build_map();
+    run_compute(moved, 0);
+    compute(moved, low.data(), low.size() * 4, 0, 0, 255, 1);
+    const Frame f = run_render(moved, 0, {}, View(), low[6]);
+
+    int differing_rows = 0;
+    for (int y = 0; y < kScreenH; ++y) {
+        const std::size_t row = static_cast<std::size_t>(y) * kScreenW * 4;
+        if (!std::equal(f.buf.begin() + row, f.buf.begin() + row + kScreenW * 4, expected.buf.begin() + row))
+            ++differing_rows;
+    }
+    check_equal(0, differing_rows, "rows that differ from a new context after a pivot change");
+    check_pixel(kRed, f.at(320, kPivot - 1), "ground under the lower pivot");
+    ctx_destroy(fresh);
+    ctx_destroy(moved);
+}
+
 void test_out_of_memory() {
     const std::vector<std::uint8_t> px = pixels(64, 64, kRed);
     const int img = image_create(px.data(), px.size(), 64, 64);
@@ -1017,6 +1044,7 @@ int main() {
     test_render_camera_range();
     test_sprite_ranges();
     test_out_of_range_tiles();
+    test_lighting_without_history();
     test_autotile_animation();
     test_heights_and_walls();
     test_out_of_memory();
